@@ -2,22 +2,32 @@ package jsonpath
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/PaesslerAG/gval"
 )
 
-// NewJsonpath returns an selector for given jsonpath
-// If the JSON Path plainly the selector returns all matchts as []Match
+// New returns an selector for given jsonpath
+// If the JSON Path plainly the selector returns all Matches
 // A JSON Path is not plain if it contains one of
 // [key1, key2 ...], .., *, [min:max], [min:max:step], (? expression)
-func NewJsonpath(path string) (gval.Evaluable, error) {
+func New(path string) (gval.Evaluable, error) {
 	return lang.NewEvaluable(path)
+}
+
+//Get executes given jsonpath on given value
+func Get(path string, value interface{}) (interface{}, error) {
+	eval, err := lang.NewEvaluable(path)
+	if err != nil {
+		return nil, err
+	}
+	return eval(context.Background(), value)
 }
 
 type match func(key string, v interface{})
 
-//Matches of a jsonpath. The key is an Array of the Values used for the wildcards in the jsonpath
+//Matches of a jsonpath. The key is an Pointer to an Array of the Values used for the wildcards in the jsonpath
 type Matches map[*[]string]interface{}
 
 var lang = gval.NewLanguage(

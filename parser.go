@@ -33,10 +33,6 @@ func (p *parser) newSingleStage(next single) {
 	}
 }
 
-func (p *parser) convertToMulti() {
-
-}
-
 func (p *parser) newMultiStage(next multi) {
 	if p.single != nil {
 		s := p.single

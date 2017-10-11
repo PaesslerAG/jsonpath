@@ -9,7 +9,7 @@ import (
 	"github.com/PaesslerAG/gval"
 )
 
-func TestNewJsonpath(t *testing.T) {
+func TestNew(t *testing.T) {
 	type matchKey = []string
 	type match struct {
 		key   matchKey
@@ -467,9 +467,9 @@ func TestNewJsonpath(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			get, err := NewJsonpath(tt.path)
+			get, err := New(tt.path)
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("NewJsonpath() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("New() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr {
 				return
@@ -483,7 +483,7 @@ func TestNewJsonpath(t *testing.T) {
 					}
 					got, err := get(context.Background(), v)
 					if (err != nil) != sub.wantErr {
-						t.Errorf("NewJsonpath()(*) error = %v, wantErr %v", err, sub.wantErr)
+						t.Errorf("New()(*) error = %v, wantErr %v", err, sub.wantErr)
 						return
 					}
 
