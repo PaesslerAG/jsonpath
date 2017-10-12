@@ -491,29 +491,29 @@ func TestNew(t *testing.T) {
 						return
 					}
 
-					if matches, ok := sub.want.([]match); ok {
-						gotMatches, ok := got.(Matches)
+					if matchs, ok := sub.want.([]match); ok {
+						gotMatchs, ok := got.(Matchs)
 						if !ok {
 							t.Fatalf("expected multiple results but got %v (%T)", got, got)
 						}
-						for _, match := range matches {
+						for _, match := range matchs {
 							var key *[]string
-							for k := range gotMatches {
+							for k := range gotMatchs {
 								if reflect.DeepEqual(*k, match.key) {
 									key = k
 									break
 								}
 							}
 							if key == nil {
-								t.Fatalf("missing %v in %+v", match, gotMatches)
+								t.Fatalf("missing %v in %+v", match, gotMatchs)
 							}
-							if !reflect.DeepEqual(match.value, gotMatches[key]) {
-								t.Fatalf("expected %v, but got %v for key %v", match.value, gotMatches[key], *key)
+							if !reflect.DeepEqual(match.value, gotMatchs[key]) {
+								t.Fatalf("expected %v, but got %v for key %v", match.value, gotMatchs[key], *key)
 							}
-							delete(gotMatches, key)
+							delete(gotMatchs, key)
 						}
-						if len(gotMatches) > 0 {
-							t.Fatalf("unexpected matches %v", gotMatches)
+						if len(gotMatchs) > 0 {
+							t.Fatalf("unexpected matchs %v", gotMatchs)
 						}
 						return
 					}

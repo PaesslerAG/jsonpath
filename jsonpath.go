@@ -9,7 +9,7 @@ import (
 )
 
 // New returns an selector for given jsonpath
-// If the JSON Path plainly the selector returns all Matches
+// If the JSON Path plainly the selector returns all Matchs
 // A JSON Path is not plain if it contains one of
 // [key1, key2 ...], .., *, [min:max], [min:max:step], (? expression)
 func New(path string) (gval.Evaluable, error) {
@@ -27,8 +27,8 @@ func Get(path string, value interface{}) (interface{}, error) {
 
 type match func(key string, v interface{})
 
-//Matches of a jsonpath. The key is an Pointer to an Array of the Values used for the wildcards in the jsonpath
-type Matches map[*[]string]interface{}
+//Matchs of a jsonpath. The key is an Pointer to an Array of the Values used for the wildcards in the jsonpath
+type Matchs map[*[]string]interface{}
 
 var lang = gval.NewLanguage(
 	gval.Base(),
@@ -41,7 +41,7 @@ func Language() gval.Language {
 	return lang
 }
 
-func (m Matches) String() string {
+func (m Matchs) String() string {
 	sb := bytes.Buffer{}
 	sb.WriteString("{")
 	sep := ""

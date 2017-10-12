@@ -69,20 +69,20 @@ func (p *parser) evaluable() gval.Evaluable {
 
 	}
 	return func(c context.Context, v interface{}) (interface{}, error) {
-		res := Matches{}
+		res := Matchs{}
 		evaluateMultis(c, v, v, nil, multis, &res)
 
 		return res, nil
 	}
 }
 
-func evaluateMultis(c context.Context, r, v interface{}, keys []string, ms []multi, matches *Matches) {
+func evaluateMultis(c context.Context, r, v interface{}, keys []string, ms []multi, matchs *Matchs) {
 	if len(ms) == 0 {
-		(*matches)[&keys] = v
+		(*matchs)[&keys] = v
 		return
 	}
 	ms[0](c, r, v, func(key string, v interface{}) {
-		evaluateMultis(c, r, v, append(keys, key), ms[1:], matches)
+		evaluateMultis(c, r, v, append(keys, key), ms[1:], matchs)
 	})
 }
 

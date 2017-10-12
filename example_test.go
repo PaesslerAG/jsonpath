@@ -47,7 +47,7 @@ func ExampleGet_wildcard() {
 		os.Exit(1)
 	}
 
-	for wildcards, value := range welcome.(jsonpath.Matches) {
+	for wildcards, value := range welcome.(jsonpath.Matchs) {
 		fmt.Printf("%s -> %v\n", (*wildcards)[0], value)
 	}
 
@@ -71,7 +71,7 @@ func ExampleGet_filter() {
 		os.Exit(1)
 	}
 
-	for _, value := range welcome.(jsonpath.Matches) {
+	for _, value := range welcome.(jsonpath.Matchs) {
 		fmt.Println(value)
 	}
 
@@ -127,7 +127,7 @@ func Example() {
 		os.Exit(1)
 	}
 
-	for wildcards, device := range devices.(jsonpath.Matches) {
+	for wildcards, device := range devices.(jsonpath.Matchs) {
 		fmt.Printf("%s -> %v\n", (*wildcards)[1], device)
 	}
 
