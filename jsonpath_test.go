@@ -464,6 +464,36 @@ func TestNew(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "script",
+			path: `$*.value(@=="a")`,
+			sub: []subcase{
+				{
+					name: "object",
+					data: `[{"key": "x","value":"a"},{"key": "y","value":"b"}]`,
+					want: []match{
+						{matchKey{`0`}, true},
+						{matchKey{`1`}, false},
+					},
+				},
+			},
+		},
+		{
+			name: "mapper script",
+			path: `$..(@=="a")`,
+			sub: []subcase{
+				{
+					name: "object",
+					data: `[{"key": "x","value":"a"},{"key": "y","value":"b"}]`,
+					want: []match{
+						{matchKey{`["0"]["key"]`}, false},
+						{matchKey{`["0"]["value"]`}, true},
+						{matchKey{`["1"]["key"]`}, false},
+						{matchKey{`["1"]["value"]`}, false},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

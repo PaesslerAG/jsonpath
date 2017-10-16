@@ -185,3 +185,10 @@ func negmax(n, max int) int {
 	}
 	return n
 }
+
+// ()
+func newScript(script gval.Evaluable) single {
+	return func(c context.Context, r, v interface{}) (interface{}, error) {
+		return script(c, v)
+	}
+}

@@ -1,7 +1,6 @@
 package jsonpath
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -28,7 +27,10 @@ func Get(path string, value interface{}) (interface{}, error) {
 type match func(key string, v interface{})
 
 //Matchs of a jsonpath. The key is an Pointer to an Array of the Values used for the wildcards in the jsonpath
-type Matchs map[*[]string]interface{}
+type Matchs = map[*Wildcards]interface{}
+
+//Wildcards TODO find correct name
+type Wildcards []string
 
 var lang = gval.NewLanguage(
 	gval.Base(),
@@ -41,17 +43,6 @@ func Language() gval.Language {
 	return lang
 }
 
-func (m Matchs) String() string {
-	sb := bytes.Buffer{}
-	sb.WriteString("{")
-	sep := ""
-	for k, e := range m {
-		sb.WriteString(sep)
-		sep = " "
-		sb.WriteString(fmt.Sprintf("%v", *k))
-		sb.WriteString(":")
-		sb.WriteString(fmt.Sprintf("%v", e))
-	}
-	sb.WriteString("}")
-	return sb.String()
+func (w Wildcards) String() string {
+	return fmt.Sprint([]string(w))
 }

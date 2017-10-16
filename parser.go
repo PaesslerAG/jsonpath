@@ -76,7 +76,7 @@ func (p *parser) evaluable() gval.Evaluable {
 	}
 }
 
-func evaluateMultis(c context.Context, r, v interface{}, keys []string, ms []multi, matchs *Matchs) {
+func evaluateMultis(c context.Context, r, v interface{}, keys Wildcards, ms []multi, matchs *Matchs) {
 	if len(ms) == 0 {
 		(*matchs)[&keys] = v
 		return
