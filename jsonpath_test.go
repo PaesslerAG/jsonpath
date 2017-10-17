@@ -12,7 +12,7 @@ import (
 func TestNew(t *testing.T) {
 	type matchKey = []string
 	type match struct {
-		key   matchKey
+		key   Wildcards
 		value interface{}
 	}
 	type obj = map[string]interface{}
@@ -466,7 +466,7 @@ func TestNew(t *testing.T) {
 		},
 		{
 			name: "script",
-			path: `$*.value(@=="a")`,
+			path: `$.*.value(@=="a")`,
 			sub: []subcase{
 				{
 					name: "object",
@@ -486,10 +486,46 @@ func TestNew(t *testing.T) {
 					name: "object",
 					data: `[{"key": "x","value":"a"},{"key": "y","value":"b"}]`,
 					want: []match{
+						{matchKey{``}, false},
+						{matchKey{`["0"]`}, false},
+						{matchKey{`["1"]`}, false},
 						{matchKey{`["0"]["key"]`}, false},
 						{matchKey{`["0"]["value"]`}, true},
 						{matchKey{`["1"]["key"]`}, false},
 						{matchKey{`["1"]["value"]`}, false},
+					},
+				},
+			},
+		},
+		{
+			name: "mapper select script",
+			path: `$.abc.f..["x"](@ == "1")`,
+			sub: []subcase{
+				{
+					name: "object",
+					data: `{
+						"abc":{
+						   "d":[
+							  "1",
+							  "1"
+						   ],
+						   "f":{
+							  "a":{
+								 "x":"1"
+							  },
+							  "b":{
+								 "x":"1"
+							  },
+							  "c":{
+								 "x":"xx"
+							  }
+						   }
+						}
+					 }`,
+					want: []match{
+						{matchKey{`["a"]`, `x`}, true},
+						{matchKey{`["b"]`, `x`}, true},
+						{matchKey{`["c"]`, `x`}, false},
 					},
 				},
 			},
@@ -527,7 +563,7 @@ func TestNew(t *testing.T) {
 							t.Fatalf("expected multiple results but got %v (%T)", got, got)
 						}
 						for _, match := range matchs {
-							var key *[]string
+							var key *Wildcards
 							for k := range gotMatchs {
 								if reflect.DeepEqual(*k, match.key) {
 									key = k
