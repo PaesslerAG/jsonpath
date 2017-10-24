@@ -7,13 +7,17 @@ import (
 )
 
 type parser struct {
-	gval.Parser
+	*gval.Parser
 	single
-	multis []multi
+	multis multis
 }
 
 //multi evaluate wildcard
 type multi func(c context.Context, r, v interface{}, m match)
+
+type multis []multi
+
+type match func(key, v interface{})
 
 //single evaluate exactly one result
 type single func(c context.Context, r, v interface{}) (interface{}, error)
@@ -53,39 +57,50 @@ func (p *parser) evaluable() gval.Evaluable {
 	if p.multis == nil {
 		return p.single.evaluable
 	}
-	multis := p.multis
-	if p.single != nil {
-		s := p.single
-		inner := multis[len(multis)-1]
-		multis[len(multis)-1] = func(c context.Context, r, v interface{}, m match) {
-			inner(c, r, v, func(key string, v interface{}) {
-				v, err := s(c, r, v)
-				if err != nil {
-					return
-				}
-				m(key, v)
-			})
-		}
-
-	}
-	return func(c context.Context, v interface{}) (interface{}, error) {
-		res := Matchs{}
-		evaluateMultis(c, v, v, nil, multis, &res)
-
-		return res, nil
-	}
+	return p.getMultis().evaluable
 }
 
-func evaluateMultis(c context.Context, r, v interface{}, keys Wildcards, ms []multi, matchs *Matchs) {
+func (p *parser) getMultis() multis {
+	last := len(p.multis) - 1
+	if p.single != nil {
+		p.multis[last] = p.multis[last].append(p.single)
+		p.single = nil
+	}
+	return p.multis
+}
+
+func (ms multis) visitMatchs(c context.Context, r, v interface{}, visit func(keys []interface{}, match interface{})) {
 	if len(ms) == 0 {
-		(*matchs)[&keys] = v
+		visit(nil, v)
 		return
 	}
-	ms[0](c, r, v, func(key string, v interface{}) {
-		evaluateMultis(c, r, v, append(keys, key), ms[1:], matchs)
+	ms[0](c, r, v, func(key, v interface{}) {
+		ms[1:].visitMatchs(c, r, v, func(keys []interface{}, match interface{}) {
+			visit(append([]interface{}{key}, keys...), match)
+		})
 	})
+}
+
+func (ms multis) evaluable(c context.Context, v interface{}) (interface{}, error) {
+	matchs := []interface{}{}
+	ms.visitMatchs(c, v, v, func(keys []interface{}, match interface{}) {
+		matchs = append(matchs, match)
+	})
+	return matchs, nil
 }
 
 func (s single) evaluable(c context.Context, v interface{}) (interface{}, error) {
 	return s(c, v, v)
+}
+
+func (multi multi) append(s single) multi {
+	return func(c context.Context, r, v interface{}, m match) {
+		multi(c, r, v, func(key, v interface{}) {
+			v, err := s(c, r, v)
+			if err != nil {
+				return
+			}
+			m(key, v)
+		})
+	}
 }

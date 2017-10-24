@@ -37,12 +37,12 @@ func getSelectEvaluable(key gval.Evaluable) single {
 	}
 }
 
-// * / **
+// *  / [*]
 func starEvaluable(c context.Context, r, v interface{}, m match) {
 	visitAll(v, func(key string, val interface{}) { m(key, val) })
 }
 
-// * / [] / [x, ...] / [*]
+// [x, ...]
 func getMultiSelectEvaluable(keys []gval.Evaluable) multi {
 	if len(keys) == 0 {
 		return starEvaluable
@@ -88,15 +88,15 @@ func selectValue(c context.Context, key gval.Evaluable, r, v interface{}) (value
 
 //..
 func mapperEvaluable(c context.Context, r, v interface{}, m match) {
-	m("", v)
+	m([]interface{}{}, v)
 	visitAll(v, func(wildcard string, v interface{}) {
-		mapperEvaluable(c, r, v, func(key string, v interface{}) {
-			m("["+strconv.Quote(wildcard)+"]"+key, v)
+		mapperEvaluable(c, r, v, func(key interface{}, v interface{}) {
+			m(append([]interface{}{wildcard}, key.([]interface{})...), v)
 		})
 	})
 }
 
-func visitAll(v interface{}, visit match) {
+func visitAll(v interface{}, visit func(key string, v interface{})) {
 	switch v := v.(type) {
 	case []interface{}:
 		for i, e := range v {

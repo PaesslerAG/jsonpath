@@ -47,13 +47,13 @@ func ExampleGet_wildcard() {
 		os.Exit(1)
 	}
 
-	for wildcards, value := range welcome.(jsonpath.Matchs) {
-		fmt.Printf("%s -> %v\n", (*wildcards)[0], value)
+	for _, value := range welcome.([]interface{}) {
+		fmt.Printf("%v\n", value)
 	}
 
 	// Output
-	// 0 -> Hello World!
-	// 1 -> Good Morning
+	// Hello World!
+	// Good Morning
 }
 
 func ExampleGet_filter() {
@@ -71,7 +71,7 @@ func ExampleGet_filter() {
 		os.Exit(1)
 	}
 
-	for _, value := range welcome.(jsonpath.Matchs) {
+	for _, value := range welcome.([]interface{}) {
 		fmt.Println(value)
 	}
 
@@ -80,9 +80,9 @@ func ExampleGet_filter() {
 }
 
 func Example() {
-	builder := gval.Full(jsonpath.Language())
+	builder := gval.Full(jsonpath.WildcardExtension())
 
-	path, err := builder.NewEvaluable("$..[?@.ping && @.speed > 100].name")
+	path, err := builder.NewEvaluable("{#1: $..[?@.ping && @.speed > 100].name}")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -127,8 +127,8 @@ func Example() {
 		os.Exit(1)
 	}
 
-	for wildcards, device := range devices.(jsonpath.Matchs) {
-		fmt.Printf("%s -> %v\n", (*wildcards)[1], device)
+	for device, name := range devices.(map[string]interface{}) {
+		fmt.Printf("%s -> %v\n", device, name)
 	}
 
 	// Unordered output:

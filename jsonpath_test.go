@@ -3,7 +3,9 @@ package jsonpath_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/PaesslerAG/gval"
@@ -14,22 +16,17 @@ type jsonpathTest struct {
 	name         string
 	path         string
 	data         string
-	extension    gval.Language
+	lang         gval.Language
+	reorder      bool
 	want         interface{}
 	wantErr      bool
 	wantParseErr bool
 }
 
-type match struct {
-	key   jsonpath.Wildcards
-	value interface{}
-}
-
-type matchKey = []string
 type obj = map[string]interface{}
 type arr = []interface{}
 
-func TestNew(t *testing.T) {
+func TestJsonPath(t *testing.T) {
 
 	tests := []jsonpathTest{
 		{
@@ -84,86 +81,84 @@ func TestNew(t *testing.T) {
 			name: "range array",
 			path: "$[2:6].a",
 			data: `[55,41,70,{"a":"bb"}]`,
-			want: []match{
-				{matchKey{"3"}, "bb"},
-			},
+			want: arr{"bb"},
 		},
 		{
 			name: "range object", //no range over objects
 			path: "$[2:6].a",
 			data: `{"3":{"a":"aa"}}`,
-			want: []match{},
+			want: arr{},
 		},
 		{
 			name: "range multi match",
 			path: "$[2:6].a",
 			data: `[{"a":"xx"},41,{"a":"b1"},{"a":"b2"},55,{"a":"b3"},{"a":"x2"} ]`,
-			want: []match{
-				{matchKey{"2"}, "b1"},
-				{matchKey{"3"}, "b2"},
-				{matchKey{"5"}, "b3"},
+			want: arr{
+				"b1",
+				"b2",
+				"b3",
 			},
 		},
 		{
 			name: "range all",
 			path: "$[:]",
 			data: `[55,41,70,{"a":"bb"}]`,
-			want: []match{
-				{matchKey{"0"}, 55.},
-				{matchKey{"1"}, 41.},
-				{matchKey{"2"}, 70.},
-				{matchKey{"3"}, obj{"a": "bb"}},
+			want: arr{
+				55.,
+				41.,
+				70.,
+				obj{"a": "bb"},
 			},
 		},
 		{
 			name: "range all even",
 			path: "$[::2]",
 			data: `[55,41,70,{"a":"bb"}]`,
-			want: []match{
-				{matchKey{"0"}, 55.},
-				{matchKey{"2"}, 70.},
+			want: arr{
+				55.,
+				70.,
 			},
 		},
 		{
 			name: "range all even reverse",
 			path: "$[::-2]",
 			data: `[55,41,70,{"a":"bb"}]`,
-			want: []match{
-				{matchKey{"3"}, obj{"a": "bb"}},
-				{matchKey{"1"}, 41.},
+			want: arr{
+				obj{"a": "bb"},
+				41.,
 			},
 		},
 		{
 			name: "range reverse",
 			path: "$[2:6:-1].a",
 			data: `[55,41,70,{"a":"bb"}]`,
-			want: []match{
-				{matchKey{"3"}, "bb"},
+			want: arr{
+				"bb",
 			},
 		},
 		{
 			name: "range reverse multi match",
 			path: "$[2:6:-1].a",
 			data: `[{"a":"xx"},41,{"a":"b1"},{"a":"b2"},55,{"a":"b3"},{"a":"x2"} ]`,
-			want: []match{
-				{matchKey{"5"}, "b3"},
-				{matchKey{"3"}, "b2"},
-				{matchKey{"2"}, "b1"},
+			want: arr{
+				"b3",
+				"b2",
+				"b1",
 			},
 		},
 		{
 			name: "range even selection",
 			path: "$[2:6:2].a",
 			data: `[55,41,70,{"a":"bb"}]`,
-			want: []match{},
+			want: arr{},
 		},
 		{
 			name: "range even multi match selection",
 			path: "$[2:6:2].a",
 			data: `[{"a":"xx"},41,{"a":"b1"},{"a":"b2"},{"a":"b3"},{"a":"x2"} ]`,
-			want: []match{
-				{matchKey{"2"}, "b1"},
-				{matchKey{"4"}, "b3"},
+			want: arr{
+				"b1",
+				"b3",
 			},
 		},
 		{
@@ -173,92 +168,95 @@ func TestNew(t *testing.T) {
 			want: "aa",
 		},
 		{
-			name: "multi pick array",
+			name: "union array",
 			path: "$[1, 3].a",
 			data: `[55,{"a":"1a"},70,{"a":"bb"}]`,
-			want: []match{
-				{matchKey{"1"}, "1a"},
-				{matchKey{"3"}, "bb"},
+			want: arr{
+				"1a",
+				"bb",
 			},
 		},
 		{
-			name: "multi pick object",
+			name: "union object",
 			path: "$[1, 3].a",
 			data: `{"3":{"a":"3a"}, "1":{"a":"1a"}, "x":{"7":"bb"}}`,
-			want: []match{
-				{matchKey{"1"}, "1a"},
-				{matchKey{"3"}, "3a"},
+			want: arr{
+				"1a",
+				"3a",
 			},
 		},
 		{
-			name: "multi pick array partilly matched",
+			name: "union array partilly matched",
 			path: "$[1, 3].a",
 			data: `[55,41,70,{"a":"bb"}]`,
-			want: []match{
-				{matchKey{"3"}, "bb"},
+			want: arr{
+				"bb",
 			},
 		},
 		{
-			name: "multi pick object partilly matched",
+			name: "union object partilly matched",
 			path: "$[1, 3].a",
 			data: `{"1":{"a":"aa"}, "3":{}, "x":{"7":"bb"}}`,
-			want: []match{
-				{matchKey{"1"}, "aa"},
+			want: arr{
+				"aa",
 			},
 		},
 		{
-			name: "multi pick star array",
+			name: "union wildcard array",
 			path: "$[1, 3].*",
 			data: `[55,{"a":"1a"},70,{"b":"bb", "c":"cc"}]`,
-			want: []match{
-				{matchKey{"1", "a"}, "1a"},
-				{matchKey{"3", "b"}, "bb"},
-				{matchKey{"3", "c"}, "cc"},
+			want: arr{
+				"1a",
+				"bb",
+				"cc",
 			},
+			reorder: true,
 		},
 		{
-			name: "multi pick star object",
+			name: "union wildcard object",
 			path: "$[1, 3].*",
 			data: `{"3":{"a":"3a"}, "1":{"7":"1a"}, "x":{"a":"bb"}}`,
-			want: []match{
-				{matchKey{"1", "7"}, "1a"},
-				{matchKey{"3", "a"}, "3a"},
+			want: arr{
+				"1a",
+				"3a",
 			},
 		},
 		{
-			name: "multi pick star array partilly matched",
+			name: "union wildcard array partilly matched",
 			path: "$[1, 3].*",
 			data: `[55,41,70,{"a":"bb"}]`,
-			want: []match{
-				{matchKey{"3", "a"}, "bb"},
+			want: arr{
+				"bb",
 			},
 		},
 		{
-			name: "multi pick star object partilly matched",
+			name: "union wildcard object partilly matched",
 			path: "$[1, 3].*",
 			data: `{"1":{"a":"aa", "7":"cc"}, "3":{}, "x":{"7":"bb"}}`,
-			want: []match{
-				{matchKey{"1", "7"}, "cc"},
-				{matchKey{"1", "a"}, "aa"},
+			want: arr{
+				"aa",
+				"cc",
 			},
+			reorder: true,
 		},
 		{
-			name: "multi pick bracket star array",
+			name: "union bracket wildcard array",
 			path: "$[1, 3][*]",
 			data: `[55,{"a":"1a"},70,{"b":"bb", "c":"cc"}]`,
-			want: []match{
-				{matchKey{"1", "a"}, "1a"},
-				{matchKey{"3", "b"}, "bb"},
-				{matchKey{"3", "c"}, "cc"},
+			want: arr{
+				"1a",
+				"bb",
+				"cc",
 			},
+			reorder: true,
 		},
 		{
-			name: "multi pick bracket star object",
+			name: "union bracket wildcard object",
 			path: "$[1, 3][*]",
 			data: `{"3":{"a":"3a"}, "1":{"7":"1a"}, "x":{"a":"bb"}}`,
-			want: []match{
-				{matchKey{"1", "7"}, "1a"},
-				{matchKey{"3", "a"}, "3a"},
+			want: arr{
+				"1a",
+				"3a",
 			},
 		},
 		{
@@ -279,106 +277,110 @@ func TestNew(t *testing.T) {
 						"b" : [{"x" : 2}, {"y" : 3}],
 						"x" : 4
 					}`,
-			want: []match{
-				{matchKey{`["a"]`}, 1.},
-				{matchKey{`["b"]["0"]`}, 2.},
-				{matchKey{``}, 4.},
+			want: arr{
+				1.,
+				2.,
+				4.,
 			},
+			reorder: true,
 		},
 		{
-			name: "mapper multipick",
+			name: "mapper union",
 			path: `$..["x", "a"]`,
 			data: `{
 						"a" : {"x" : 1},
 						"b" : [{"x" : 2}, {"y" : 3}],
 						"x" : 4
 					}`,
-			want: []match{
-				{matchKey{``, `a`}, obj{"x": 1.}},
-				{matchKey{`["a"]`, `x`}, 1.},
-				{matchKey{`["b"]["0"]`, `x`}, 2.},
-				{matchKey{``, `x`}, 4.},
+			want: arr{
+				1.,
+				2.,
+				4.,
+				obj{"x": 1.},
 			},
+			reorder: true,
 		},
 		{
-			name: "mapper star",
+			name: "mapper wildcard",
 			path: `$..*`,
 			data: `{"1":{"a":"aa", "b":[1 ,2, 3]}, "3":{}, "x":{"7":"bb"}}`,
-			want: []match{
-				{matchKey{"", `1`}, obj{"a": "aa", "b": arr{1., 2., 3.}}},
-				{matchKey{`["1"]`, "a"}, "aa"},
-				{matchKey{`["1"]`, "b"}, arr{1., 2., 3.}},
-				{matchKey{`["1"]["b"]`, "0"}, 1.},
-				{matchKey{`["1"]["b"]`, "1"}, 2.},
-				{matchKey{`["1"]["b"]`, "2"}, 3.},
-				{matchKey{``, "3"}, obj{}},
-				{matchKey{``, "x"}, obj{"7": "bb"}},
-				{matchKey{`["x"]`, "7"}, "bb"},
+			want: arr{
+				1.,
+				2.,
+				3.,
+				"aa",
+				"bb",
+				arr{1., 2., 3.},
+				obj{},
+				obj{"7": "bb"},
+				obj{"a": "aa", "b": arr{1., 2., 3.}},
 			},
+			reorder: true,
 		},
 		{
 			name: "mapper filter true",
 			path: `$..[?true]`,
 			data: `{"1":{"a":"aa", "b":[1 ,2, 3]}, "3":{}, "x":{"7":"bb"}}`,
-			want: []match{
-				{matchKey{"", `1`}, obj{"a": "aa", "b": arr{1., 2., 3.}}},
-				{matchKey{`["1"]`, "a"}, "aa"},
-				{matchKey{`["1"]`, "b"}, arr{1., 2., 3.}},
-				{matchKey{`["1"]["b"]`, "0"}, 1.},
-				{matchKey{`["1"]["b"]`, "1"}, 2.},
-				{matchKey{`["1"]["b"]`, "2"}, 3.},
-				{matchKey{``, "3"}, obj{}},
-				{matchKey{``, "x"}, obj{"7": "bb"}},
-				{matchKey{`["x"]`, "7"}, "bb"},
+			want: arr{
+				1.,
+				2.,
+				3.,
+				"aa",
+				"bb",
+				arr{1., 2., 3.},
+				obj{},
+				obj{"7": "bb"},
+				obj{"a": "aa", "b": arr{1., 2., 3.}},
 			},
+			reorder: true,
 		},
 		{
 			name: "mapper filter a=aa",
 			path: `$..[?@.a=="aa"]`,
 			data: `{"1":{"a":"aa", "b":[1 ,2, 3]}, "3":{}, "x":{"7":"bb"}, "y":{"a":"bb"}}`,
-			want: []match{
-				{matchKey{``, "1"}, obj{"a": "aa", "b": arr{1., 2., 3.}}},
+			want: arr{
+				obj{"a": "aa", "b": arr{1., 2., 3.}},
 			},
-			extension: gval.Full(),
 		},
 		{
 			name: "mapper filter (a=aa)",
 			path: `$..[?(@.a=="aa")]`,
 			data: `{"1":{"a":"aa", "b":[1 ,2, 3]}, "3":{}, "x":{"7":"bb"}, "y":{"a":"bb"}}`,
-			want: []match{
-				{matchKey{``, "1"}, obj{"a": "aa", "b": arr{1., 2., 3.}}},
+			want: arr{
+				obj{"a": "aa", "b": arr{1., 2., 3.}},
 			},
 		},
 		{
 			name: "key value",
 			path: `$[?(@.key=="x")].value`,
 			data: `[{"key": "x","value":"a"},{"key": "y","value":"b"}]`,
-			want: []match{
-				{matchKey{`0`}, "a"},
+			want: arr{
+				"a",
 			},
 		},
 		{
 			name: "script",
 			path: `$.*.value(@=="a")`,
 			data: `[{"key": "x","value":"a"},{"key": "y","value":"b"}]`,
-			want: []match{
-				{matchKey{`0`}, true},
-				{matchKey{`1`}, false},
+			want: arr{
+				true,
+				false,
 			},
 		},
 		{
 			name: "mapper script",
 			path: `$..(@=="a")`,
 			data: `[{"key": "x","value":"a"},{"key": "y","value":"b"}]`,
-			want: []match{
-				{matchKey{``}, false},
-				{matchKey{`["0"]`}, false},
-				{matchKey{`["1"]`}, false},
-				{matchKey{`["0"]["key"]`}, false},
-				{matchKey{`["0"]["value"]`}, true},
-				{matchKey{`["1"]["key"]`}, false},
-				{matchKey{`["1"]["value"]`}, false},
+			want: arr{
+				false,
+				false,
+				false,
+				false,
+				false,
+				false,
+				true,
 			},
+			reorder: true,
 		},
 		{
 			name: "mapper select script",
@@ -402,20 +404,22 @@ func TestNew(t *testing.T) {
 						   }
 						}
 					 }`,
-			want: []match{
-				{matchKey{`["a"]`, `x`}, true},
-				{matchKey{`["b"]`, `x`}, true},
-				{matchKey{`["c"]`, `x`}, false},
+			want: arr{
+				false,
+				true,
+				true,
 			},
+			reorder: true,
 		},
 	}
 	for _, tt := range tests {
+		tt.lang = jsonpath.Language()
 		t.Run(tt.name, tt.test)
 	}
 }
 
 func (tt jsonpathTest) test(t *testing.T) {
-	get, err := jsonpath.New(tt.path)
+	get, err := tt.lang.NewEvaluable(tt.path)
 	if (err != nil) != tt.wantParseErr {
 		t.Fatalf("New() error = %v, wantErr %v", err, tt.wantErr)
 	}
@@ -428,43 +432,68 @@ func (tt jsonpathTest) test(t *testing.T) {
 		t.Fatalf("could not parse json input: %v", err)
 	}
 	got, err := get(context.Background(), v)
-	if (err != nil) != tt.wantErr {
-		t.Errorf("New()(*) error = %v, wantErr %v", err, tt.wantErr)
-		return
-	}
 
 	if tt.wantErr {
+		if err == nil {
+			t.Errorf("expected error %v but got %v", tt.wantErr, got)
+			return
+		}
 		return
 	}
 
-	if matchs, ok := tt.want.([]match); ok {
-		gotMatchs, ok := got.(jsonpath.Matchs)
-		if !ok {
-			t.Fatalf("expected multiple results but got %v (%T)", got, got)
-		}
-		for _, match := range matchs {
-			var key *jsonpath.Wildcards
-			for k := range gotMatchs {
-				if reflect.DeepEqual(*k, match.key) {
-					key = k
-					break
-				}
-			}
-			if key == nil {
-				t.Fatalf("missing %v in %+v", match, gotMatchs)
-			}
-			if !reflect.DeepEqual(match.value, gotMatchs[key]) {
-				t.Fatalf("expected %v, but got %v for key %v", match.value, gotMatchs[key], *key)
-			}
-			delete(gotMatchs, key)
-		}
-		if len(gotMatchs) > 0 {
-			t.Fatalf("unexpected matchs %v", gotMatchs)
-		}
+	if err != nil {
+		t.Errorf("JSONPath(*) error = %v", err)
 		return
+	}
+
+	if tt.reorder {
+		reorder(got.(arr))
 	}
 
 	if !reflect.DeepEqual(got, tt.want) {
 		t.Fatalf("expected %v, but got %v", tt.want, got)
+	}
+}
+
+func reorder(sl []interface{}) {
+	sort.Slice(sl, func(i, j int) bool {
+		a := sl[i]
+		b := sl[j]
+		if reflect.TypeOf(a) != reflect.TypeOf(b) {
+			return typeOrder(a) < typeOrder(b)
+		}
+
+		switch a := a.(type) {
+		case string:
+			return a < b.(string)
+		case float64:
+			return a < b.(float64)
+		case bool:
+			return !a || b.(bool)
+		case arr:
+			return len(a) < len(b.(arr))
+		case obj:
+			return len(a) < len(b.(obj))
+		default:
+			panic(fmt.Errorf("unknown type %T", a))
+		}
+	})
+}
+
+func typeOrder(o interface{}) int {
+	switch o.(type) {
+	case bool:
+		return 0
+	case float64:
+		return 1
+	case string:
+		return 2
+	case arr:
+		return 3
+	case obj:
+		return 4
+
+	default:
+		panic(fmt.Errorf("unknown type %T", o))
 	}
 }

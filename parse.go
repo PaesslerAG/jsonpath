@@ -9,17 +9,14 @@ import (
 	"github.com/PaesslerAG/gval"
 )
 
-func parse(s single) func(c context.Context, p *gval.Parser) (r gval.Evaluable, err error) {
-	return func(c context.Context, p *gval.Parser) (r gval.Evaluable, err error) {
-		jp := &parser{Parser: *p, single: s}
-		err = jp.parsePath(c)
+func (s single) parse(c context.Context, p *gval.Parser) (r gval.Evaluable, err error) {
+	jp := &parser{Parser: p, single: s}
+	err = jp.parsePath(c)
 
-		*p = jp.Parser
-		if err != nil {
-			return nil, err
-		}
-		return jp.evaluable(), nil
+	if err != nil {
+		return nil, err
 	}
+	return jp.evaluable(), nil
 }
 
 func (jp *parser) parsePath(c context.Context) error {

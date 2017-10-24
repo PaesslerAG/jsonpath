@@ -1,16 +1,21 @@
 package jsonpath
 
+// jsonpath is an implementation of http://goessner.net/articles/JsonPath/
+// If a JSONPath contains one of
+// [key1, key2 ...], .., *, [min:max], [min:max:step], (? expression)
+// all matchs are listed in an []interface{}
+//
+// The package comes with an extension of JSONPath to access the wildcard values of a match.
+// If the JSONPath is used inside of a JSON object, you can use '#' or '#i' with natural number i
+// to access all wildcards values or the ith wildcard
+
 import (
 	"context"
-	"fmt"
 
 	"github.com/PaesslerAG/gval"
 )
 
 // New returns an selector for given jsonpath
-// If the JSON Path plainly the selector returns all Matchs
-// A JSON Path is not plain if it contains one of
-// [key1, key2 ...], .., *, [min:max], [min:max:step], (? expression)
 func New(path string) (gval.Evaluable, error) {
 	return lang.NewEvaluable(path)
 }
@@ -24,18 +29,10 @@ func Get(path string, value interface{}) (interface{}, error) {
 	return eval(context.Background(), value)
 }
 
-type match func(key string, v interface{})
-
-//Matchs of a jsonpath. The key is an Pointer to an Array of the Values used for the wildcards in the jsonpath
-type Matchs = map[*Wildcards]interface{}
-
-//Wildcards TODO find correct name
-type Wildcards []string
-
 var lang = gval.NewLanguage(
 	gval.Base(),
-	gval.PrefixExtension('$', parse(getRootEvaluable)),
-	gval.PrefixExtension('@', parse(getCurrentEvaluable)),
+	gval.PrefixExtension('$', single(getRootEvaluable).parse),
+	gval.PrefixExtension('@', single(getCurrentEvaluable).parse),
 )
 
 //Language is the jsonpath Language
@@ -43,6 +40,13 @@ func Language() gval.Language {
 	return lang
 }
 
-func (w Wildcards) String() string {
-	return fmt.Sprint([]string(w))
+var wildcardExtension = gval.NewLanguage(
+	lang,
+	gval.PrefixExtension('{', parseJSONObject),
+	gval.PrefixExtension('#', parseMatchReference),
+)
+
+//WildcardExtension is the jsonpath Language with access to the values, that matchs used wildcards
+func WildcardExtension() gval.Language {
+	return wildcardExtension
 }
