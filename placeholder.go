@@ -30,7 +30,7 @@ func parseJSONObject(c context.Context, p *gval.Parser) (gval.Evaluable, error) 
 			hasWildcard := false
 
 			p.Camouflage("object", ',', '}')
-			key, err := p.ParseExpression(context.WithValue(c, hasWildcardsContextKey{}, &hasWildcard))
+			key, err := p.ParseExpression(context.WithValue(c, hasPlaceholdersContextKey{}, &hasWildcard))
 			if err != nil {
 				return nil, err
 			}
@@ -85,7 +85,7 @@ func (kv keyValuePair) visit(c context.Context, v interface{}, visit func(key st
 
 func (kv keyValueMatcher) visit(c context.Context, v interface{}, visit func(key string, value interface{})) (err error) {
 	kv.matcher(c, v, v, func(keys []interface{}, match interface{}) {
-		key, er := kv.key.EvalString(context.WithValue(c, wildcardsContextKey{}, keys), v)
+		key, er := kv.key.EvalString(context.WithValue(c, placeholdersContextKey{}, keys), v)
 		if er != nil {
 			err = er
 		}
@@ -105,10 +105,10 @@ func (j jsonObject) evaluable(c context.Context, v interface{}) (interface{}, er
 	return vs, nil
 }
 
-func parseMatchReference(c context.Context, p *gval.Parser) (gval.Evaluable, error) {
-	hasWildcard := c.Value(hasWildcardsContextKey{})
+func parsePlaceholder(c context.Context, p *gval.Parser) (gval.Evaluable, error) {
+	hasWildcard := c.Value(hasPlaceholdersContextKey{})
 	if hasWildcard == nil {
-		return nil, fmt.Errorf("JSONPath match reference must only be used in an JSON object key")
+		return nil, fmt.Errorf("JSONPath placeholder must only be used in an JSON object key")
 	}
 	*(hasWildcard.(*bool)) = true
 	switch p.Scan() {
@@ -117,27 +117,27 @@ func parseMatchReference(c context.Context, p *gval.Parser) (gval.Evaluable, err
 		if err != nil {
 			return nil, err
 		}
-		return wildcardKey(id).evaluable, nil
+		return placeholder(id).evaluable, nil
 	default:
-		p.Camouflage("JSONPath match reference")
-		return allWildcards.evaluable, nil
+		p.Camouflage("JSONPath placeholder")
+		return allPlaceholders.evaluable, nil
 	}
 }
 
-type hasWildcardsContextKey struct{}
+type hasPlaceholdersContextKey struct{}
 
-type wildcardsContextKey struct{}
+type placeholdersContextKey struct{}
 
-type wildcardKey int
+type placeholder int
 
-const allWildcards = wildcardKey(-1)
+const allPlaceholders = placeholder(-1)
 
-func (key wildcardKey) evaluable(c context.Context, v interface{}) (interface{}, error) {
-	wildcards, ok := c.Value(wildcardsContextKey{}).([]interface{})
+func (key placeholder) evaluable(c context.Context, v interface{}) (interface{}, error) {
+	wildcards, ok := c.Value(placeholdersContextKey{}).([]interface{})
 	if !ok || len(wildcards) <= int(key) {
-		return nil, fmt.Errorf("channel key #%d is not available", key)
+		return nil, fmt.Errorf("JSONPath placeholder #%d is not available", key)
 	}
-	if key == allWildcards {
+	if key == allPlaceholders {
 		sb := bytes.Buffer{}
 		sb.WriteString("$")
 		quoteWildcardValues(&sb, wildcards)

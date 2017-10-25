@@ -6,7 +6,7 @@ package jsonpath
 // all matchs are listed in an []interface{}
 //
 // The package comes with an extension of JSONPath to access the wildcard values of a match.
-// If the JSONPath is used inside of a JSON object, you can use '#' or '#i' with natural number i
+// If the JSONPath is used inside of a JSON object, you can use placeholder '#' or '#i' with natural number i
 // to access all wildcards values or the ith wildcard
 
 import (
@@ -40,13 +40,13 @@ func Language() gval.Language {
 	return lang
 }
 
-var wildcardExtension = gval.NewLanguage(
+var placeholderExtension = gval.NewLanguage(
 	lang,
 	gval.PrefixExtension('{', parseJSONObject),
-	gval.PrefixExtension('#', parseMatchReference),
+	gval.PrefixExtension('#', parsePlaceholder),
 )
 
-//WildcardExtension is the jsonpath Language with access to the values, that matchs used wildcards
-func WildcardExtension() gval.Language {
-	return wildcardExtension
+//PlaceholderExtension is the jsonpath Language with access to the values, that matchs used wildcards
+func PlaceholderExtension() gval.Language {
+	return placeholderExtension
 }
