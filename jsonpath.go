@@ -15,12 +15,12 @@ import (
 	"github.com/PaesslerAG/gval"
 )
 
-// New returns an selector for given jsonpath
+// New returns an selector for given JSONPath
 func New(path string) (gval.Evaluable, error) {
 	return lang.NewEvaluable(path)
 }
 
-//Get executes given jsonpath on given value
+//Get executes given JSONPath on given value
 func Get(path string, value interface{}) (interface{}, error) {
 	eval, err := lang.NewEvaluable(path)
 	if err != nil {
@@ -35,7 +35,7 @@ var lang = gval.NewLanguage(
 	gval.PrefixExtension('@', single(getCurrentEvaluable).parse),
 )
 
-//Language is the jsonpath Language
+//Language is the JSONPath Language
 func Language() gval.Language {
 	return lang
 }
@@ -46,7 +46,7 @@ var placeholderExtension = gval.NewLanguage(
 	gval.PrefixExtension('#', parsePlaceholder),
 )
 
-//PlaceholderExtension is the jsonpath Language with access to the values, that matchs used wildcards
+//PlaceholderExtension is the JSONPath Language with placeholder
 func PlaceholderExtension() gval.Language {
 	return placeholderExtension
 }
