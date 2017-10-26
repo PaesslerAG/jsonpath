@@ -163,7 +163,7 @@ func TestWildcardsExtension(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt.lang = jsonpath.WildcardExtension()
+		tt.lang = jsonpath.PlaceholderExtension()
 		t.Run(tt.name, tt.test)
 	}
 }

@@ -80,7 +80,7 @@ func ExampleGet_filter() {
 }
 
 func Example() {
-	builder := gval.Full(jsonpath.WildcardExtension())
+	builder := gval.Full(jsonpath.PlaceholderExtension())
 
 	path, err := builder.NewEvaluable("{#1: $..[?@.ping && @.speed > 100].name}")
 	if err != nil {
