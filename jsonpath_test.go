@@ -48,6 +48,12 @@ func TestJsonPath(t *testing.T) {
 			want: "hey",
 		},
 		{
+			name:    "negativ select array",
+			path:    "$[-1]",
+			data:    `[7, "hey"]`,
+			wantErr: true,
+		},
+		{
 			name: "simple select object",
 			path: "$[1]",
 			data: `{"1":"aa"}`,
@@ -177,6 +183,15 @@ func TestJsonPath(t *testing.T) {
 			},
 		},
 		{
+			name: "negativ union array",
+			path: "$[1, -5, 3].a",
+			data: `[55,{"a":"1a"},70,{"a":"bb"}]`,
+			want: arr{
+				"1a",
+				"bb",
+			},
+		},
+		{
 			name: "union object",
 			path: "$[1, 3].a",
 			data: `{"3":{"a":"3a"}, "1":{"a":"1a"}, "x":{"7":"bb"}}`,
@@ -273,10 +288,10 @@ func TestJsonPath(t *testing.T) {
 			name: "mapper",
 			path: "$..x",
 			data: `{
-						"a" : {"x" : 1},
-						"b" : [{"x" : 2}, {"y" : 3}],
-						"x" : 4
-					}`,
+                        "a" : {"x" : 1},
+                        "b" : [{"x" : 2}, {"y" : 3}],
+                        "x" : 4
+                    }`,
 			want: arr{
 				1.,
 				2.,
@@ -288,10 +303,10 @@ func TestJsonPath(t *testing.T) {
 			name: "mapper union",
 			path: `$..["x", "a"]`,
 			data: `{
-						"a" : {"x" : 1},
-						"b" : [{"x" : 2}, {"y" : 3}],
-						"x" : 4
-					}`,
+                        "a" : {"x" : 1},
+                        "b" : [{"x" : 2}, {"y" : 3}],
+                        "x" : 4
+                    }`,
 			want: arr{
 				1.,
 				2.,
@@ -386,24 +401,24 @@ func TestJsonPath(t *testing.T) {
 			name: "mapper select script",
 			path: `$.abc.f..["x"](@ == "1")`,
 			data: `{
-						"abc":{
-						   "d":[
-							  "1",
-							  "1"
-						   ],
-						   "f":{
-							  "a":{
-								 "x":"1"
-							  },
-							  "b":{
-								 "x":"1"
-							  },
-							  "c":{
-								 "x":"xx"
-							  }
-						   }
-						}
-					 }`,
+                        "abc":{
+                            "d":[
+                                "1",
+                                "1"
+                            ],
+                            "f":{
+                                "a":{
+                                    "x":"1"
+                                },
+                                "b":{
+                                    "x":"1"
+                                },
+                                "c":{
+                                    "x":"xx"
+                                }
+                            }
+                        }
+                    }`,
 			want: arr{
 				false,
 				true,
