@@ -52,8 +52,8 @@ func ExampleGet_wildcard() {
 	}
 
 	// Output:
-	// Hello World!
 	// Good Morning
+	// Hello World!
 }
 
 func ExampleGet_filter() {
@@ -65,13 +65,13 @@ func ExampleGet_filter() {
 		{"key":"c","value" : "III"}
 		]`), &v)
 
-	welcome, err := jsonpath.Get(`$[@key=="b"]`, v)
+	values, err := jsonpath.Get(`$[? @.key=="b"].value`, v)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	for _, value := range welcome.([]interface{}) {
+	for _, value := range values.([]interface{}) {
 		fmt.Println(value)
 	}
 
@@ -79,7 +79,7 @@ func ExampleGet_filter() {
 	// II
 }
 
-func Example() {
+func Example_gval() {
 	builder := gval.Full(jsonpath.PlaceholderExtension())
 
 	path, err := builder.NewEvaluable("{#1: $..[?@.ping && @.speed > 100].name}")
