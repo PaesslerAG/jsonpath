@@ -20,7 +20,7 @@ func ExampleGet() {
 			}
 		}`), &v)
 
-	welcome, err := jsonpath.Get("$welcome.message[1]", v)
+	welcome, err := jsonpath.Get("$.welcome.message[1]", v)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -28,7 +28,7 @@ func ExampleGet() {
 
 	fmt.Println(welcome)
 
-	// Output
+	// Output:
 	// Hello World!
 }
 
@@ -41,7 +41,7 @@ func ExampleGet_wildcard() {
 			}
 		}`), &v)
 
-	welcome, err := jsonpath.Get("$welcome.message[*]", v)
+	welcome, err := jsonpath.Get("$.welcome.message[*]", v)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -51,9 +51,9 @@ func ExampleGet_wildcard() {
 		fmt.Printf("%v\n", value)
 	}
 
-	// Output
-	// Hello World!
+	// Output:
 	// Good Morning
+	// Hello World!
 }
 
 func ExampleGet_filter() {
@@ -65,21 +65,21 @@ func ExampleGet_filter() {
 		{"key":"c","value" : "III"}
 		]`), &v)
 
-	welcome, err := jsonpath.Get(`$[@key=="b"]`, v)
+	values, err := jsonpath.Get(`$[? @.key=="b"].value`, v)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	for _, value := range welcome.([]interface{}) {
+	for _, value := range values.([]interface{}) {
 		fmt.Println(value)
 	}
 
-	// Output
+	// Output:
 	// II
 }
 
-func Example() {
+func Example_gval() {
 	builder := gval.Full(jsonpath.PlaceholderExtension())
 
 	path, err := builder.NewEvaluable("{#1: $..[?@.ping && @.speed > 100].name}")
