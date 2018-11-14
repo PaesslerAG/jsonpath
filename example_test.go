@@ -20,7 +20,7 @@ func ExampleGet() {
 			}
 		}`), &v)
 
-	welcome, err := jsonpath.Get("$welcome.message[1]", v)
+	welcome, err := jsonpath.Get("$.welcome.message[1]", v)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -28,7 +28,7 @@ func ExampleGet() {
 
 	fmt.Println(welcome)
 
-	// Output
+	// Output:
 	// Hello World!
 }
 
@@ -41,7 +41,7 @@ func ExampleGet_wildcard() {
 			}
 		}`), &v)
 
-	welcome, err := jsonpath.Get("$welcome.message[*]", v)
+	welcome, err := jsonpath.Get("$.welcome.message[*]", v)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -51,7 +51,7 @@ func ExampleGet_wildcard() {
 		fmt.Printf("%v\n", value)
 	}
 
-	// Output
+	// Output:
 	// Hello World!
 	// Good Morning
 }
@@ -75,7 +75,7 @@ func ExampleGet_filter() {
 		fmt.Println(value)
 	}
 
-	// Output
+	// Output:
 	// II
 }
 
