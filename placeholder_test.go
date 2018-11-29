@@ -161,6 +161,15 @@ func TestWildcardsExtension(t *testing.T) {
 				"1": obj{"a": "aa", "b": arr{1., 2., 3.}},
 			},
 		},
+		{
+			name: "brackets",
+			path: `{ #0 : $[*]["line-rx"]}`,
+			data: `{"1":{"line-rx":"aa", "b":[1 ,2, 3]}, "3":{}, "x":{"line-rx":"bb"}, "y":{"a":"bb"}}`,
+			want: obj{
+				"1": "aa",
+				"x": "bb",
+			},
+		},
 	}
 	for _, tt := range tests {
 		tt.lang = jsonpath.PlaceholderExtension()
