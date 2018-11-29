@@ -1,6 +1,4 @@
-package jsonpath
-
-// jsonpath is an implementation of http://goessner.net/articles/JsonPath/
+// Package jsonpath is an implementation of http://goessner.net/articles/JsonPath/
 // If a JSONPath contains one of
 // [key1, key2 ...], .., *, [min:max], [min:max:step], (? expression)
 // all matchs are listed in an []interface{}
@@ -8,6 +6,8 @@ package jsonpath
 // The package comes with an extension of JSONPath to access the wildcard values of a match.
 // If the JSONPath is used inside of a JSON object, you can use placeholder '#' or '#i' with natural number i
 // to access all wildcards values or the ith wildcard
+package jsonpath
+
 import (
 	"context"
 
