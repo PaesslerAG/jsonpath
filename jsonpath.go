@@ -8,7 +8,6 @@ package jsonpath
 // The package comes with an extension of JSONPath to access the wildcard values of a match.
 // If the JSONPath is used inside of a JSON object, you can use placeholder '#' or '#i' with natural number i
 // to access all wildcards values or the ith wildcard
-
 import (
 	"context"
 
