@@ -11,6 +11,16 @@ type path interface {
 
 type simplePath []single
 
+//multi evaluate wildcard
+type multi func(c context.Context, r, v interface{}, m match)
+
+type multis []multi
+
+type match func(key, v interface{}) // TODO naming
+
+//single evaluate exactly one result
+type single func(c context.Context, r, v interface{}) (interface{}, error)
+
 func (p simplePath) evaluate(ctx context.Context, root interface{}) (interface{}, error) {
 	return p.evaluatePath(ctx, root, root)
 }

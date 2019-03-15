@@ -9,6 +9,19 @@ import (
 	"github.com/PaesslerAG/gval"
 )
 
+type parser struct {
+	*gval.Parser
+	path path
+}
+
+func (p *parser) newSingleStage(next single) {
+	p.path = p.path.withSelector(next)
+}
+
+func (p *parser) newMultiStage(next multi) {
+	p.path = p.path.withMultiSelector(next)
+}
+
 func parseRootPath(ctx context.Context, gParser *gval.Parser) (r gval.Evaluable, err error) {
 	p := newParser(gParser)
 	return p.parse(ctx)
