@@ -6,15 +6,12 @@ type path interface {
 	evaluate(c context.Context, parameter interface{}) (interface{}, error)
 	visitMatchs(c context.Context, r interface{}, visit pathMatcher)
 	withPlainSelector(plainSelector) path
-	withAmbiguousSelector(multi) path
+	withAmbiguousSelector(ambiguousSelector) path
 }
 
 type plainPath []plainSelector
 
 type match func(key, v interface{}) // TODO naming
-
-//plainSelector evaluate exactly one result
-type plainSelector func(c context.Context, r, v interface{}) (interface{}, error)
 
 func (p plainPath) evaluate(ctx context.Context, root interface{}) (interface{}, error) {
 	return p.evaluatePath(ctx, root, root)
@@ -53,7 +50,7 @@ func (p plainPath) visitMatchs(ctx context.Context, r interface{}, visit pathMat
 func (p plainPath) withPlainSelector(selector plainSelector) path {
 	return append(p, selector)
 }
-func (p plainPath) withAmbiguousSelector(selector multi) path {
+func (p plainPath) withAmbiguousSelector(selector ambiguousSelector) path {
 	return &ambiguousPath{
 		parent: p,
 		branch: selector,
@@ -62,14 +59,9 @@ func (p plainPath) withAmbiguousSelector(selector multi) path {
 
 type ambiguousPath struct {
 	parent path
-	branch multi
+	branch ambiguousSelector
 	ending plainPath
 }
-
-//multi evaluate wildcard
-type multi func(c context.Context, r, v interface{}, m match)
-
-type multis []multi
 
 func (p *ambiguousPath) evaluate(ctx context.Context, parameter interface{}) (interface{}, error) {
 	matchs := []interface{}{}
@@ -97,7 +89,7 @@ func (p *ambiguousPath) withPlainSelector(selector plainSelector) path {
 	p.ending = append(p.ending, selector)
 	return p
 }
-func (p *ambiguousPath) withAmbiguousSelector(selector multi) path {
+func (p *ambiguousPath) withAmbiguousSelector(selector ambiguousSelector) path {
 	return &ambiguousPath{
 		parent: p,
 		branch: selector,

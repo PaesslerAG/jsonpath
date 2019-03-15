@@ -8,9 +8,17 @@ import (
 	"github.com/PaesslerAG/gval"
 )
 
+//plainSelector evaluate exactly one result
+type plainSelector func(c context.Context, r, v interface{}) (interface{}, error)
+
+//ambiguousSelector evaluate wildcard
+type ambiguousSelector func(c context.Context, r, v interface{}, m match)
+
 //@
-func getCurrentEvaluable(c context.Context, r, v interface{}) (interface{}, error) {
-	return c.Value(currentElement{}), nil
+func currentElementSelector() plainSelector {
+	return func(c context.Context, r, v interface{}) (interface{}, error) {
+		return c.Value(currentElement{}), nil
+	}
 }
 
 type currentElement struct{}
@@ -20,7 +28,7 @@ func currentContext(c context.Context, v interface{}) context.Context {
 }
 
 //.x, [x]
-func getSelectEvaluable(key gval.Evaluable) plainSelector {
+func directSelector(key gval.Evaluable) plainSelector {
 	return func(c context.Context, r, v interface{}) (interface{}, error) {
 
 		e, _, err := selectValue(c, key, r, v)
@@ -32,15 +40,17 @@ func getSelectEvaluable(key gval.Evaluable) plainSelector {
 	}
 }
 
-// *  / [*]
-func starEvaluable(c context.Context, r, v interface{}, m match) {
-	visitAll(v, func(key string, val interface{}) { m(key, val) })
+// * / [*]
+func starSelector() ambiguousSelector {
+	return func(c context.Context, r, v interface{}, m match) {
+		visitAll(v, func(key string, val interface{}) { m(key, val) })
+	}
 }
 
 // [x, ...]
-func getMultiSelectEvaluable(keys []gval.Evaluable) multi {
+func multiSelector(keys []gval.Evaluable) ambiguousSelector {
 	if len(keys) == 0 {
-		return starEvaluable
+		return starSelector()
 	}
 	return func(c context.Context, r, v interface{}, m match) {
 		for _, k := range keys {
@@ -82,10 +92,14 @@ func selectValue(c context.Context, key gval.Evaluable, r, v interface{}) (value
 }
 
 //..
-func mapperEvaluable(c context.Context, r, v interface{}, m match) {
+func mapperSelector() ambiguousSelector {
+	return mapper
+}
+
+func mapper(c context.Context, r, v interface{}, m match) {
 	m([]interface{}{}, v)
 	visitAll(v, func(wildcard string, v interface{}) {
-		mapperEvaluable(c, r, v, func(key interface{}, v interface{}) {
+		mapper(c, r, v, func(key interface{}, v interface{}) {
 			m(append([]interface{}{wildcard}, key.([]interface{})...), v)
 		})
 	})
@@ -107,7 +121,7 @@ func visitAll(v interface{}, visit func(key string, v interface{})) {
 }
 
 //[? ]
-func filterEvaluable(filter gval.Evaluable) multi {
+func filterSelector(filter gval.Evaluable) ambiguousSelector {
 	return func(c context.Context, r, v interface{}, m match) {
 		visitAll(v, func(wildcard string, v interface{}) {
 			condition, err := filter.EvalBool(currentContext(c, v), r)
@@ -122,7 +136,7 @@ func filterEvaluable(filter gval.Evaluable) multi {
 }
 
 //[::]
-func getRangeEvaluable(min, max, step gval.Evaluable) multi {
+func rangeSelector(min, max, step gval.Evaluable) ambiguousSelector {
 	return func(c context.Context, r, v interface{}, m match) {
 		cs, ok := v.([]interface{})
 		if !ok {
