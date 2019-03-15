@@ -11,7 +11,7 @@ type path interface {
 
 type plainPath []plainSelector
 
-type match func(key, v interface{}) // TODO naming
+type ambiguousMatcher func(key, v interface{}) // TODO naming ambiguousSelectorResultCollector
 
 func (p plainPath) evaluate(ctx context.Context, root interface{}) (interface{}, error) {
 	return p.evaluatePath(ctx, root, root)
@@ -28,14 +28,14 @@ func (p plainPath) evaluatePath(ctx context.Context, root, value interface{}) (i
 	return value, nil
 }
 
-func (p plainPath) matcher(ctx context.Context, r interface{}, m match) match {
+func (p plainPath) matcher(ctx context.Context, r interface{}, match ambiguousMatcher) ambiguousMatcher {
 	if len(p) == 0 {
-		return m
+		return match
 	}
 	return func(k, v interface{}) {
 		res, err := p.evaluatePath(ctx, r, v)
 		if err == nil {
-			m(k, res)
+			match(k, res)
 		}
 	}
 }
@@ -79,7 +79,7 @@ func (p *ambiguousPath) visitMatchs(ctx context.Context, r interface{}, visit pa
 	})
 }
 
-func (p *ambiguousPath) branchMatcher(ctx context.Context, r interface{}, m match) match {
+func (p *ambiguousPath) branchMatcher(ctx context.Context, r interface{}, m ambiguousMatcher) ambiguousMatcher {
 	return func(k, v interface{}) {
 		p.branch(ctx, r, v, m)
 	}
@@ -102,7 +102,7 @@ type ambiguousResults struct {
 
 type pathMatcher func(keys []interface{}, match interface{})
 
-func (m pathMatcher) matcher(keys []interface{}) match {
+func (m pathMatcher) matcher(keys []interface{}) ambiguousMatcher {
 	return func(key, match interface{}) {
 		m(append(keys, key), match)
 	}
