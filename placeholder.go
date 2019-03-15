@@ -13,7 +13,7 @@ import (
 type keyValueVisitor func(key string, value interface{})
 
 type jsonObject interface {
-	visitElements(c context.Context, v interface{}, visit func(key string, value interface{})) error
+	visitElements(c context.Context, v interface{}, visit keyValueVisitor) error
 }
 
 type jsonObjectSlice []jsonObject
@@ -80,7 +80,7 @@ func parseJSONObjectElement(ctx context.Context, gParser *gval.Parser, hasWildca
 	return keyValuePair{key, value}, nil
 }
 
-func (kv keyValuePair) visitElements(c context.Context, v interface{}, visit func(key string, value interface{})) error {
+func (kv keyValuePair) visitElements(c context.Context, v interface{}, visit keyValueVisitor) error {
 	value, err := kv.value(c, v)
 	if err != nil {
 		return err
@@ -93,7 +93,7 @@ func (kv keyValuePair) visitElements(c context.Context, v interface{}, visit fun
 	return nil
 }
 
-func (kv keyValueMatcher) visitElements(c context.Context, v interface{}, visit func(key string, value interface{})) (err error) {
+func (kv keyValueMatcher) visitElements(c context.Context, v interface{}, visit keyValueVisitor) (err error) {
 	kv.matcher(c, v, func(keys []interface{}, match interface{}) {
 		key, er := kv.key.EvalString(context.WithValue(c, placeholdersContextKey{}, keys), v)
 		if er != nil {
@@ -118,7 +118,7 @@ func (j jsonObjectSlice) evaluable(c context.Context, v interface{}) (interface{
 	return vs, nil
 }
 
-func (j jsonObjectSlice) visitElements(ctx context.Context, v interface{}, visit func(key string, value interface{})) (err error) {
+func (j jsonObjectSlice) visitElements(ctx context.Context, v interface{}, visit keyValueVisitor) (err error) {
 	for _, e := range j {
 		if err := e.visitElements(ctx, v, visit); err != nil {
 			return err
