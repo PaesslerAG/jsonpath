@@ -10,7 +10,13 @@ import (
 	"github.com/PaesslerAG/gval"
 )
 
-type jsonObject []func(c context.Context, v interface{}, visit func(key string, value interface{})) error
+type keyValueVisitor func(key string, value interface{})
+
+type jsonObject interface {
+	visitElements(c context.Context, v interface{}, visit keyValueVisitor) error
+}
+
+type jsonObjectSlice []jsonObject
 
 type keyValuePair struct {
 	key   gval.Evaluable
@@ -19,18 +25,18 @@ type keyValuePair struct {
 
 type keyValueMatcher struct {
 	key     gval.Evaluable
-	matcher func(c context.Context, r, v interface{}, visit func(keys []interface{}, match interface{}))
+	matcher func(c context.Context, r interface{}, visit pathMatcher)
 }
 
-func parseJSONObject(c context.Context, p *gval.Parser) (gval.Evaluable, error) {
-	evals := jsonObject{}
+func parseJSONObject(ctx context.Context, p *gval.Parser) (gval.Evaluable, error) {
+	evals := jsonObjectSlice{}
 	for {
 		switch p.Scan() {
 		default:
 			hasWildcard := false
 
 			p.Camouflage("object", ',', '}')
-			key, err := p.ParseExpression(context.WithValue(c, hasPlaceholdersContextKey{}, &hasWildcard))
+			key, err := p.ParseExpression(context.WithValue(ctx, hasPlaceholdersContextKey{}, &hasWildcard))
 			if err != nil {
 				return nil, err
 			}
@@ -39,30 +45,11 @@ func parseJSONObject(c context.Context, p *gval.Parser) (gval.Evaluable, error) 
 					return nil, p.Expected("object", ':')
 				}
 			}
-			switch hasWildcard {
-			case true:
-				jp := &parser{Parser: p}
-				switch p.Scan() {
-				case '$':
-					jp.single = getRootEvaluable
-				case '@':
-					jp.single = getCurrentEvaluable
-				default:
-					return nil, p.Expected("JSONPath key and value")
-				}
-				err = jp.parsePath(c)
-
-				if err != nil {
-					return nil, err
-				}
-				evals = append(evals, keyValueMatcher{key, jp.getMultis().visitMatchs}.visit)
-			case false:
-				value, err := p.ParseExpression(c)
-				if err != nil {
-					return nil, err
-				}
-				evals = append(evals, keyValuePair{key, value}.visit)
+			e, err := parseJSONObjectElement(ctx, p, hasWildcard, key)
+			if err != nil {
+				return nil, err
 			}
+			evals.addElements(e)
 		case ',':
 		case '}':
 			return evals.evaluable, nil
@@ -70,7 +57,30 @@ func parseJSONObject(c context.Context, p *gval.Parser) (gval.Evaluable, error) 
 	}
 }
 
-func (kv keyValuePair) visit(c context.Context, v interface{}, visit func(key string, value interface{})) error {
+func parseJSONObjectElement(ctx context.Context, gParser *gval.Parser, hasWildcard bool, key gval.Evaluable) (jsonObject, error) {
+	if hasWildcard {
+		p := newParser(gParser)
+		switch gParser.Scan() {
+		case '$':
+		case '@':
+			p.appendPlainSelector(currentElementSelector())
+		default:
+			return nil, p.Expected("JSONPath key and value")
+		}
+
+		if err := p.parsePath(ctx); err != nil {
+			return nil, err
+		}
+		return keyValueMatcher{key, p.path.visitMatchs}, nil
+	}
+	value, err := gParser.ParseExpression(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return keyValuePair{key, value}, nil
+}
+
+func (kv keyValuePair) visitElements(c context.Context, v interface{}, visit keyValueVisitor) error {
 	value, err := kv.value(c, v)
 	if err != nil {
 		return err
@@ -83,8 +93,8 @@ func (kv keyValuePair) visit(c context.Context, v interface{}, visit func(key st
 	return nil
 }
 
-func (kv keyValueMatcher) visit(c context.Context, v interface{}, visit func(key string, value interface{})) (err error) {
-	kv.matcher(c, v, v, func(keys []interface{}, match interface{}) {
+func (kv keyValueMatcher) visitElements(c context.Context, v interface{}, visit keyValueVisitor) (err error) {
+	kv.matcher(c, v, func(keys []interface{}, match interface{}) {
 		key, er := kv.key.EvalString(context.WithValue(c, placeholdersContextKey{}, keys), v)
 		if er != nil {
 			err = er
@@ -94,15 +104,27 @@ func (kv keyValueMatcher) visit(c context.Context, v interface{}, visit func(key
 	return
 }
 
-func (j jsonObject) evaluable(c context.Context, v interface{}) (interface{}, error) {
+func (j *jsonObjectSlice) addElements(e jsonObject) {
+	*j = append(*j, e)
+}
+
+func (j jsonObjectSlice) evaluable(c context.Context, v interface{}) (interface{}, error) {
 	vs := map[string]interface{}{}
-	for _, e := range j {
-		err := e(c, v, func(key string, value interface{}) { vs[key] = value })
-		if err != nil {
-			return nil, err
-		}
+
+	err := j.visitElements(c, v, func(key string, value interface{}) { vs[key] = value })
+	if err != nil {
+		return nil, err
 	}
 	return vs, nil
+}
+
+func (j jsonObjectSlice) visitElements(ctx context.Context, v interface{}, visit keyValueVisitor) (err error) {
+	for _, e := range j {
+		if err := e.visitElements(ctx, v, visit); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func parsePlaceholder(c context.Context, p *gval.Parser) (gval.Evaluable, error) {

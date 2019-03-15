@@ -33,8 +33,8 @@ func Get(path string, value interface{}) (interface{}, error) {
 
 var lang = gval.NewLanguage(
 	gval.Base(),
-	gval.PrefixExtension('$', single(getRootEvaluable).parse),
-	gval.PrefixExtension('@', single(getCurrentEvaluable).parse),
+	gval.PrefixExtension('$', parseRootPath),
+	gval.PrefixExtension('@', parseCurrentPath),
 )
 
 //Language is the JSONPath Language

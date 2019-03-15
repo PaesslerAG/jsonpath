@@ -8,14 +8,17 @@ import (
 	"github.com/PaesslerAG/gval"
 )
 
-//$
-func getRootEvaluable(c context.Context, r, v interface{}) (interface{}, error) {
-	return v, nil
-}
+//plainSelector evaluate exactly one result
+type plainSelector func(c context.Context, r, v interface{}) (interface{}, error)
+
+//ambiguousSelector evaluate wildcard
+type ambiguousSelector func(c context.Context, r, v interface{}, match ambiguousMatcher)
 
 //@
-func getCurrentEvaluable(c context.Context, r, v interface{}) (interface{}, error) {
-	return c.Value(currentElement{}), nil
+func currentElementSelector() plainSelector {
+	return func(c context.Context, r, v interface{}) (interface{}, error) {
+		return c.Value(currentElement{}), nil
+	}
 }
 
 type currentElement struct{}
@@ -25,7 +28,7 @@ func currentContext(c context.Context, v interface{}) context.Context {
 }
 
 //.x, [x]
-func getSelectEvaluable(key gval.Evaluable) single {
+func directSelector(key gval.Evaluable) plainSelector {
 	return func(c context.Context, r, v interface{}) (interface{}, error) {
 
 		e, _, err := selectValue(c, key, r, v)
@@ -37,23 +40,25 @@ func getSelectEvaluable(key gval.Evaluable) single {
 	}
 }
 
-// *  / [*]
-func starEvaluable(c context.Context, r, v interface{}, m match) {
-	visitAll(v, func(key string, val interface{}) { m(key, val) })
+// * / [*]
+func starSelector() ambiguousSelector {
+	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
+		visitAll(v, func(key string, val interface{}) { match(key, val) })
+	}
 }
 
 // [x, ...]
-func getMultiSelectEvaluable(keys []gval.Evaluable) multi {
+func multiSelector(keys []gval.Evaluable) ambiguousSelector {
 	if len(keys) == 0 {
-		return starEvaluable
+		return starSelector()
 	}
-	return func(c context.Context, r, v interface{}, m match) {
+	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
 		for _, k := range keys {
 			e, wildcard, err := selectValue(c, k, r, v)
 			if err != nil {
 				continue
 			}
-			m(wildcard, e)
+			match(wildcard, e)
 		}
 	}
 }
@@ -87,11 +92,15 @@ func selectValue(c context.Context, key gval.Evaluable, r, v interface{}) (value
 }
 
 //..
-func mapperEvaluable(c context.Context, r, v interface{}, m match) {
-	m([]interface{}{}, v)
+func mapperSelector() ambiguousSelector {
+	return mapper
+}
+
+func mapper(c context.Context, r, v interface{}, match ambiguousMatcher) {
+	match([]interface{}{}, v)
 	visitAll(v, func(wildcard string, v interface{}) {
-		mapperEvaluable(c, r, v, func(key interface{}, v interface{}) {
-			m(append([]interface{}{wildcard}, key.([]interface{})...), v)
+		mapper(c, r, v, func(key interface{}, v interface{}) {
+			match(append([]interface{}{wildcard}, key.([]interface{})...), v)
 		})
 	})
 }
@@ -112,23 +121,23 @@ func visitAll(v interface{}, visit func(key string, v interface{})) {
 }
 
 //[? ]
-func filterEvaluable(filter gval.Evaluable) multi {
-	return func(c context.Context, r, v interface{}, m match) {
+func filterSelector(filter gval.Evaluable) ambiguousSelector {
+	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
 		visitAll(v, func(wildcard string, v interface{}) {
 			condition, err := filter.EvalBool(currentContext(c, v), r)
 			if err != nil {
 				return
 			}
 			if condition {
-				m(wildcard, v)
+				match(wildcard, v)
 			}
 		})
 	}
 }
 
 //[::]
-func getRangeEvaluable(min, max, step gval.Evaluable) multi {
-	return func(c context.Context, r, v interface{}, m match) {
+func rangeSelector(min, max, step gval.Evaluable) ambiguousSelector {
+	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
 		cs, ok := v.([]interface{})
 		if !ok {
 			return
@@ -163,11 +172,11 @@ func getRangeEvaluable(min, max, step gval.Evaluable) multi {
 
 		if step > 0 {
 			for i := min; i < max; i += step {
-				m(strconv.Itoa(i), cs[i])
+				match(strconv.Itoa(i), cs[i])
 			}
 		} else {
 			for i := max - 1; i >= min; i += step {
-				m(strconv.Itoa(i), cs[i])
+				match(strconv.Itoa(i), cs[i])
 			}
 		}
 
@@ -187,7 +196,7 @@ func negmax(n, max int) int {
 }
 
 // ()
-func newScript(script gval.Evaluable) single {
+func newScript(script gval.Evaluable) plainSelector {
 	return func(c context.Context, r, v interface{}) (interface{}, error) {
 		return script(currentContext(c, v), r)
 	}
