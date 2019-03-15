@@ -63,7 +63,7 @@ func parseJSONObjectElement(ctx context.Context, gParser *gval.Parser, hasWildca
 		switch gParser.Scan() {
 		case '$':
 		case '@':
-			p.newSingleStage(getCurrentEvaluable)
+			p.appendPlainSelector(getCurrentEvaluable)
 		default:
 			return nil, p.Expected("JSONPath key and value")
 		}

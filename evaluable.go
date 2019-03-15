@@ -20,7 +20,7 @@ func currentContext(c context.Context, v interface{}) context.Context {
 }
 
 //.x, [x]
-func getSelectEvaluable(key gval.Evaluable) single {
+func getSelectEvaluable(key gval.Evaluable) plainSelector {
 	return func(c context.Context, r, v interface{}) (interface{}, error) {
 
 		e, _, err := selectValue(c, key, r, v)
@@ -182,7 +182,7 @@ func negmax(n, max int) int {
 }
 
 // ()
-func newScript(script gval.Evaluable) single {
+func newScript(script gval.Evaluable) plainSelector {
 	return func(c context.Context, r, v interface{}) (interface{}, error) {
 		return script(currentContext(c, v), r)
 	}

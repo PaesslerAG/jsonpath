@@ -14,14 +14,6 @@ type parser struct {
 	path path
 }
 
-func (p *parser) newSingleStage(next single) {
-	p.path = p.path.withSelector(next)
-}
-
-func (p *parser) newMultiStage(next multi) {
-	p.path = p.path.withMultiSelector(next)
-}
-
 func parseRootPath(ctx context.Context, gParser *gval.Parser) (r gval.Evaluable, err error) {
 	p := newParser(gParser)
 	return p.parse(ctx)
@@ -29,12 +21,12 @@ func parseRootPath(ctx context.Context, gParser *gval.Parser) (r gval.Evaluable,
 
 func parseCurrentPath(ctx context.Context, gParser *gval.Parser) (r gval.Evaluable, err error) {
 	p := newParser(gParser)
-	p.newSingleStage(getCurrentEvaluable)
+	p.appendPlainSelector(getCurrentEvaluable)
 	return p.parse(ctx)
 }
 
 func newParser(p *gval.Parser) *parser {
-	return &parser{Parser: p, path: simplePath{}}
+	return &parser{Parser: p, path: plainPath{}}
 }
 
 func (p *parser) parse(c context.Context) (r gval.Evaluable, err error) {
@@ -64,17 +56,17 @@ func (p *parser) parsePath(c context.Context) error {
 			}
 			keys = append(keys, []gval.Evaluable{
 				p.Const(0), p.Const(float64(math.MaxInt32)), p.Const(1)}[len(keys):]...)
-			p.newMultiStage(getRangeEvaluable(keys[0], keys[1], keys[2]))
+			p.appendAmbiguousSelector(getRangeEvaluable(keys[0], keys[1], keys[2]))
 		case '?':
 			if len(keys) != 1 {
 				return fmt.Errorf("filter needs exactly one key")
 			}
-			p.newMultiStage(filterEvaluable(keys[0]))
+			p.appendAmbiguousSelector(filterEvaluable(keys[0]))
 		default:
 			if len(keys) == 1 {
-				p.newSingleStage(getSelectEvaluable(keys[0]))
+				p.appendPlainSelector(getSelectEvaluable(keys[0]))
 			} else {
-				p.newMultiStage(getMultiSelectEvaluable(keys))
+				p.appendAmbiguousSelector(getMultiSelectEvaluable(keys))
 			}
 		}
 		return p.parsePath(c)
@@ -90,13 +82,13 @@ func (p *parser) parseSelect(c context.Context) error {
 	scan := p.Scan()
 	switch scan {
 	case scanner.Ident:
-		p.newSingleStage(getSelectEvaluable(p.Const(p.TokenText())))
+		p.appendPlainSelector(getSelectEvaluable(p.Const(p.TokenText())))
 		return p.parsePath(c)
 	case '.':
-		p.newMultiStage(mapperEvaluable)
+		p.appendAmbiguousSelector(mapperEvaluable)
 		return p.parseMapper(c)
 	case '*':
-		p.newMultiStage(starEvaluable)
+		p.appendAmbiguousSelector(starEvaluable)
 		return p.parsePath(c)
 	default:
 		return p.Expected("JSON select", scanner.Ident, '.', '*')
@@ -163,7 +155,7 @@ func (p *parser) parseMapper(c context.Context) error {
 	scan := p.Scan()
 	switch scan {
 	case scanner.Ident:
-		p.newSingleStage(getSelectEvaluable(p.Const(p.TokenText())))
+		p.appendPlainSelector(getSelectEvaluable(p.Const(p.TokenText())))
 	case '[':
 		keys, seperator, err := p.parseBracket(c)
 
@@ -177,12 +169,12 @@ func (p *parser) parseMapper(c context.Context) error {
 			if len(keys) != 1 {
 				return fmt.Errorf("filter needs exactly one key")
 			}
-			p.newMultiStage(filterEvaluable(keys[0]))
+			p.appendAmbiguousSelector(filterEvaluable(keys[0]))
 		default:
-			p.newMultiStage(getMultiSelectEvaluable(keys))
+			p.appendAmbiguousSelector(getMultiSelectEvaluable(keys))
 		}
 	case '*':
-		p.newMultiStage(starEvaluable)
+		p.appendAmbiguousSelector(starEvaluable)
 	case '(':
 		return p.parseScript(c)
 	default:
@@ -199,6 +191,14 @@ func (p *parser) parseScript(c context.Context) error {
 	if p.Scan() != ')' {
 		return p.Expected("jsnopath script", ')')
 	}
-	p.newSingleStage(newScript(script))
+	p.appendPlainSelector(newScript(script))
 	return p.parsePath(c)
+}
+
+func (p *parser) appendPlainSelector(next plainSelector) {
+	p.path = p.path.withPlainSelector(next)
+}
+
+func (p *parser) appendAmbiguousSelector(next multi) {
+	p.path = p.path.withAmbiguousSelector(next)
 }
