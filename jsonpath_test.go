@@ -288,10 +288,10 @@ func TestJsonPath(t *testing.T) {
 			name: "mapper",
 			path: "$..x",
 			data: `{
-                        "a" : {"x" : 1},
-                        "b" : [{"x" : 2}, {"y" : 3}],
-                        "x" : 4
-                    }`,
+					"a" : {"x" : 1},
+					"b" : [{"x" : 2}, {"y" : 3}],
+					"x" : 4
+				}`,
 			want: arr{
 				1.,
 				2.,
@@ -303,10 +303,10 @@ func TestJsonPath(t *testing.T) {
 			name: "mapper union",
 			path: `$..["x", "a"]`,
 			data: `{
-                        "a" : {"x" : 1},
-                        "b" : [{"x" : 2}, {"y" : 3}],
-                        "x" : 4
-                    }`,
+					"a" : {"x" : 1},
+					"b" : [{"x" : 2}, {"y" : 3}],
+					"x" : 4
+				}`,
 			want: arr{
 				1.,
 				2.,
@@ -401,30 +401,36 @@ func TestJsonPath(t *testing.T) {
 			name: "mapper select script",
 			path: `$.abc.f..["x"](@ == "1")`,
 			data: `{
-                        "abc":{
-                            "d":[
-                                "1",
-                                "1"
-                            ],
-                            "f":{
-                                "a":{
-                                    "x":"1"
-                                },
-                                "b":{
-                                    "x":"1"
-                                },
-                                "c":{
-                                    "x":"xx"
-                                }
-                            }
-                        }
-                    }`,
+					"abc":{
+						"d":[
+							"1",
+							"1"
+						],
+						"f":{
+							"a":{
+								"x":"1"
+							},
+							"b":{
+								"x":"1"
+							},
+							"c":{
+								"x":"xx"
+							}
+						}
+					}
+				}`,
 			want: arr{
 				false,
 				true,
 				true,
 			},
 			reorder: true,
+		},
+		{
+			name: "float equal",
+			path: `$.a == 1.23`,
+			data: `{"a":1.23, "b":2}`,
+			want: true,
 		},
 	}
 	for _, tt := range tests {
@@ -457,7 +463,7 @@ func (tt jsonpathTest) test(t *testing.T) {
 	}
 
 	if err != nil {
-		t.Errorf("JSONPath(*) error = %v", err)
+		t.Errorf("JSONPath(%s) error = %v", tt.path, err)
 		return
 	}
 

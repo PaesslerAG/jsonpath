@@ -19,7 +19,7 @@ type keyValuePair struct {
 
 type keyValueMatcher struct {
 	key     gval.Evaluable
-	matcher func(c context.Context, r, v interface{}, visit func(keys []interface{}, match interface{}))
+	matcher func(c context.Context, r interface{}, visit pathMatcher)
 }
 
 func parseJSONObject(c context.Context, p *gval.Parser) (gval.Evaluable, error) {
@@ -41,12 +41,12 @@ func parseJSONObject(c context.Context, p *gval.Parser) (gval.Evaluable, error) 
 			}
 			switch hasWildcard {
 			case true:
-				jp := &parser{Parser: p}
+				jp := &parser{Parser: p, path: simplePath{}}
 				switch p.Scan() {
 				case '$':
-					jp.single = getRootEvaluable
+					jp.newSingleStage(getRootEvaluable)
 				case '@':
-					jp.single = getCurrentEvaluable
+					jp.newSingleStage(getCurrentEvaluable)
 				default:
 					return nil, p.Expected("JSONPath key and value")
 				}
@@ -55,7 +55,7 @@ func parseJSONObject(c context.Context, p *gval.Parser) (gval.Evaluable, error) 
 				if err != nil {
 					return nil, err
 				}
-				evals = append(evals, keyValueMatcher{key, jp.getMultis().visitMatchs}.visit)
+				evals = append(evals, keyValueMatcher{key, jp.path.visitMatchs}.visit)
 			case false:
 				value, err := p.ParseExpression(c)
 				if err != nil {
@@ -84,7 +84,7 @@ func (kv keyValuePair) visit(c context.Context, v interface{}, visit func(key st
 }
 
 func (kv keyValueMatcher) visit(c context.Context, v interface{}, visit func(key string, value interface{})) (err error) {
-	kv.matcher(c, v, v, func(keys []interface{}, match interface{}) {
+	kv.matcher(c, v, func(keys []interface{}, match interface{}) {
 		key, er := kv.key.EvalString(context.WithValue(c, placeholdersContextKey{}, keys), v)
 		if er != nil {
 			err = er

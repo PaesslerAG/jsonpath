@@ -10,13 +10,14 @@ import (
 )
 
 func (s single) parse(c context.Context, p *gval.Parser) (r gval.Evaluable, err error) {
-	jp := &parser{Parser: p, single: s}
+	jp := &parser{Parser: p, path: simplePath{}}
+	jp.newSingleStage(s) // TODO confusing as hell
 	err = jp.parsePath(c)
 
 	if err != nil {
 		return nil, err
 	}
-	return jp.evaluable(), nil
+	return jp.path.evaluate, nil
 }
 
 func (jp *parser) parsePath(c context.Context) error {

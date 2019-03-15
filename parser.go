@@ -8,8 +8,7 @@ import (
 
 type parser struct {
 	*gval.Parser
-	single
-	multis multis
+	path path
 }
 
 //multi evaluate wildcard
@@ -22,6 +21,15 @@ type match func(key, v interface{})
 //single evaluate exactly one result
 type single func(c context.Context, r, v interface{}) (interface{}, error)
 
+func (p *parser) newSingleStage(next single) {
+	p.path = p.path.withSelector(next)
+}
+
+func (p *parser) newMultiStage(next multi) {
+	p.path = p.path.withMultiSelector(next)
+}
+
+/*
 func (p *parser) newSingleStage(next single) {
 	if p.single == nil {
 		p.single = next
@@ -104,3 +112,4 @@ func (multi multi) append(s single) multi {
 		})
 	}
 }
+*/
