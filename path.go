@@ -11,7 +11,7 @@ type path interface {
 
 type plainPath []plainSelector
 
-type ambiguousMatcher func(key, v interface{}) // TODO naming ambiguousSelectorResultCollector
+type ambiguousMatcher func(key, v interface{})
 
 func (p plainPath) evaluate(ctx context.Context, root interface{}) (interface{}, error) {
 	return p.evaluatePath(ctx, root, root)
