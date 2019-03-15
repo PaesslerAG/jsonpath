@@ -72,10 +72,8 @@ func (p *ambiguousPath) evaluate(ctx context.Context, parameter interface{}) (in
 }
 
 func (p *ambiguousPath) visitMatchs(ctx context.Context, r interface{}, visit pathMatcher) {
-	p.parent.visitMatchs(ctx, r, func(keys []interface{}, match interface{}) {
-		// create a matcher and call p.branch
-		p.branch(ctx, r, match, p.ending.matcher(ctx, r, visit.matcher(keys)))
-
+	p.parent.visitMatchs(ctx, r, func(keys []interface{}, v interface{}) {
+		p.branch(ctx, r, v, p.ending.matcher(ctx, r, visit.matcher(keys)))
 	})
 }
 
@@ -94,10 +92,6 @@ func (p *ambiguousPath) withAmbiguousSelector(selector ambiguousSelector) path {
 		parent: p,
 		branch: selector,
 	}
-}
-
-type ambiguousResults struct {
-	// TODO use it or trash it?
 }
 
 type pathMatcher func(keys []interface{}, match interface{})
