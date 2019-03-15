@@ -8,11 +8,6 @@ import (
 	"github.com/PaesslerAG/gval"
 )
 
-//$
-func getRootEvaluable(c context.Context, r, v interface{}) (interface{}, error) {
-	return v, nil
-}
-
 //@
 func getCurrentEvaluable(c context.Context, r, v interface{}) (interface{}, error) {
 	return c.Value(currentElement{}), nil

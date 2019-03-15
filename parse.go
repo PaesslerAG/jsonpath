@@ -9,23 +9,36 @@ import (
 	"github.com/PaesslerAG/gval"
 )
 
-func (s single) parse(c context.Context, p *gval.Parser) (r gval.Evaluable, err error) {
-	jp := &parser{Parser: p, path: simplePath{}}
-	jp.newSingleStage(s) // TODO confusing as hell
-	err = jp.parsePath(c)
+func parseRootPath(ctx context.Context, gParser *gval.Parser) (r gval.Evaluable, err error) {
+	p := newParser(gParser)
+	return p.parse(ctx)
+}
+
+func parseCurrentPath(ctx context.Context, gParser *gval.Parser) (r gval.Evaluable, err error) {
+	p := newParser(gParser)
+	p.newSingleStage(getCurrentEvaluable)
+	return p.parse(ctx)
+}
+
+func newParser(p *gval.Parser) *parser {
+	return &parser{Parser: p, path: simplePath{}}
+}
+
+func (p *parser) parse(c context.Context) (r gval.Evaluable, err error) {
+	err = p.parsePath(c)
 
 	if err != nil {
 		return nil, err
 	}
-	return jp.path.evaluate, nil
+	return p.path.evaluate, nil
 }
 
-func (jp *parser) parsePath(c context.Context) error {
-	switch jp.Scan() {
+func (p *parser) parsePath(c context.Context) error {
+	switch p.Scan() {
 	case '.':
-		return jp.parseSelect(c)
+		return p.parseSelect(c)
 	case '[':
-		keys, seperator, err := jp.parseBracket(c)
+		keys, seperator, err := p.parseBracket(c)
 
 		if err != nil {
 			return err
@@ -37,49 +50,49 @@ func (jp *parser) parsePath(c context.Context) error {
 				return fmt.Errorf("range query has at least the parameter [min:max:step]")
 			}
 			keys = append(keys, []gval.Evaluable{
-				jp.Const(0), jp.Const(float64(math.MaxInt32)), jp.Const(1)}[len(keys):]...)
-			jp.newMultiStage(getRangeEvaluable(keys[0], keys[1], keys[2]))
+				p.Const(0), p.Const(float64(math.MaxInt32)), p.Const(1)}[len(keys):]...)
+			p.newMultiStage(getRangeEvaluable(keys[0], keys[1], keys[2]))
 		case '?':
 			if len(keys) != 1 {
 				return fmt.Errorf("filter needs exactly one key")
 			}
-			jp.newMultiStage(filterEvaluable(keys[0]))
+			p.newMultiStage(filterEvaluable(keys[0]))
 		default:
 			if len(keys) == 1 {
-				jp.newSingleStage(getSelectEvaluable(keys[0]))
+				p.newSingleStage(getSelectEvaluable(keys[0]))
 			} else {
-				jp.newMultiStage(getMultiSelectEvaluable(keys))
+				p.newMultiStage(getMultiSelectEvaluable(keys))
 			}
 		}
-		return jp.parsePath(c)
+		return p.parsePath(c)
 	case '(':
-		return jp.parseScript(c)
+		return p.parseScript(c)
 	default:
-		jp.Camouflage("jsonpath", '.', '[', '(')
+		p.Camouflage("jsonpath", '.', '[', '(')
 		return nil
 	}
 }
 
-func (jp *parser) parseSelect(c context.Context) error {
-	scan := jp.Scan()
+func (p *parser) parseSelect(c context.Context) error {
+	scan := p.Scan()
 	switch scan {
 	case scanner.Ident:
-		jp.newSingleStage(getSelectEvaluable(jp.Const(jp.TokenText())))
-		return jp.parsePath(c)
+		p.newSingleStage(getSelectEvaluable(p.Const(p.TokenText())))
+		return p.parsePath(c)
 	case '.':
-		jp.newMultiStage(mapperEvaluable)
-		return jp.parseMapper(c)
+		p.newMultiStage(mapperEvaluable)
+		return p.parseMapper(c)
 	case '*':
-		jp.newMultiStage(starEvaluable)
-		return jp.parsePath(c)
+		p.newMultiStage(starEvaluable)
+		return p.parsePath(c)
 	default:
-		return jp.Expected("JSON select", scanner.Ident, '.', '*')
+		return p.Expected("JSON select", scanner.Ident, '.', '*')
 	}
 }
 
-func (jp *parser) parseBracket(c context.Context) (keys []gval.Evaluable, seperator rune, err error) {
+func (p *parser) parseBracket(c context.Context) (keys []gval.Evaluable, seperator rune, err error) {
 	for {
-		scan := jp.Scan()
+		scan := p.Scan()
 		skipScan := false
 		switch scan {
 		case '?':
@@ -89,11 +102,11 @@ func (jp *parser) parseBracket(c context.Context) (keys []gval.Evaluable, sepera
 			if len(keys) == 1 {
 				i = math.MaxInt32
 			}
-			keys = append(keys, jp.Const(i))
+			keys = append(keys, p.Const(i))
 			skipScan = true
 		case '*':
-			if jp.Scan() != ']' {
-				return nil, 0, jp.Expected("JSON bracket star", ']')
+			if p.Scan() != ']' {
+				return nil, 0, p.Expected("JSON bracket star", ']')
 			}
 			return []gval.Evaluable{}, 0, nil
 		case ']':
@@ -103,15 +116,15 @@ func (jp *parser) parseBracket(c context.Context) (keys []gval.Evaluable, sepera
 			}
 			fallthrough
 		default:
-			jp.Camouflage("jsonpath brackets")
-			key, err := jp.ParseExpression(c)
+			p.Camouflage("jsonpath brackets")
+			key, err := p.ParseExpression(c)
 			if err != nil {
 				return nil, 0, err
 			}
 			keys = append(keys, key)
 		}
 		if !skipScan {
-			scan = jp.Scan()
+			scan = p.Scan()
 		}
 		if seperator == 0 {
 			seperator = scan
@@ -122,10 +135,10 @@ func (jp *parser) parseBracket(c context.Context) (keys []gval.Evaluable, sepera
 			return
 		case '?':
 			if len(keys) != 0 {
-				return nil, 0, jp.Expected("JSON filter", ']')
+				return nil, 0, p.Expected("JSON filter", ']')
 			}
 		default:
-			return nil, 0, jp.Expected("JSON bracket separator", ':', ',')
+			return nil, 0, p.Expected("JSON bracket separator", ':', ',')
 		}
 		if seperator != scan {
 			return nil, 0, fmt.Errorf("mixed %v and %v in JSON bracket", seperator, scan)
@@ -133,13 +146,13 @@ func (jp *parser) parseBracket(c context.Context) (keys []gval.Evaluable, sepera
 	}
 }
 
-func (jp *parser) parseMapper(c context.Context) error {
-	scan := jp.Scan()
+func (p *parser) parseMapper(c context.Context) error {
+	scan := p.Scan()
 	switch scan {
 	case scanner.Ident:
-		jp.newSingleStage(getSelectEvaluable(jp.Const(jp.TokenText())))
+		p.newSingleStage(getSelectEvaluable(p.Const(p.TokenText())))
 	case '[':
-		keys, seperator, err := jp.parseBracket(c)
+		keys, seperator, err := p.parseBracket(c)
 
 		if err != nil {
 			return err
@@ -151,28 +164,28 @@ func (jp *parser) parseMapper(c context.Context) error {
 			if len(keys) != 1 {
 				return fmt.Errorf("filter needs exactly one key")
 			}
-			jp.newMultiStage(filterEvaluable(keys[0]))
+			p.newMultiStage(filterEvaluable(keys[0]))
 		default:
-			jp.newMultiStage(getMultiSelectEvaluable(keys))
+			p.newMultiStage(getMultiSelectEvaluable(keys))
 		}
 	case '*':
-		jp.newMultiStage(starEvaluable)
+		p.newMultiStage(starEvaluable)
 	case '(':
-		return jp.parseScript(c)
+		return p.parseScript(c)
 	default:
-		return jp.Expected("JSON mapper", '[', scanner.Ident, '*')
+		return p.Expected("JSON mapper", '[', scanner.Ident, '*')
 	}
-	return jp.parsePath(c)
+	return p.parsePath(c)
 }
 
-func (jp *parser) parseScript(c context.Context) error {
-	script, err := jp.ParseExpression(c)
+func (p *parser) parseScript(c context.Context) error {
+	script, err := p.ParseExpression(c)
 	if err != nil {
 		return err
 	}
-	if jp.Scan() != ')' {
-		return jp.Expected("jsnopath script", ')')
+	if p.Scan() != ')' {
+		return p.Expected("jsnopath script", ')')
 	}
-	jp.newSingleStage(newScript(script))
-	return jp.parsePath(c)
+	p.newSingleStage(newScript(script))
+	return p.parsePath(c)
 }

@@ -16,7 +16,7 @@ type multi func(c context.Context, r, v interface{}, m match)
 
 type multis []multi
 
-type match func(key, v interface{})
+type match func(key, v interface{}) // TODO naming
 
 //single evaluate exactly one result
 type single func(c context.Context, r, v interface{}) (interface{}, error)

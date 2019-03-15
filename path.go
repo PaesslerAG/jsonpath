@@ -38,9 +38,11 @@ func (p simplePath) matcher(ctx context.Context, r interface{}, m match) match {
 	}
 }
 
-func (p simplePath) visitMatchs(c context.Context, r interface{}, visit pathMatcher) {
-	visit(nil, r)
-	return
+func (p simplePath) visitMatchs(ctx context.Context, r interface{}, visit pathMatcher) {
+	res, err := p.evaluatePath(ctx, r, r)
+	if err == nil {
+		visit(nil, res)
+	}
 }
 
 func (p simplePath) withSelector(selector single) path {
@@ -93,6 +95,7 @@ func (p *ambiguousPath) withMultiSelector(selector multi) path {
 }
 
 type ambiguousResults struct {
+	// TODO use it or trash it?
 }
 
 type pathMatcher func(keys []interface{}, match interface{})

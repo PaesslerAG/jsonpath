@@ -432,6 +432,12 @@ func TestJsonPath(t *testing.T) {
 			data: `{"a":1.23, "b":2}`,
 			want: true,
 		},
+		{
+			name: "ending star",
+			path: `$.welcome.message[*]`,
+			data: `{"welcome":{"message":["Good Morning", "Hello World!"]}}`,
+			want: arr{"Good Morning", "Hello World!"},
+		},
 	}
 	for _, tt := range tests {
 		tt.lang = jsonpath.Language()
