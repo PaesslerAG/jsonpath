@@ -1,2 +1,0 @@
-# github.com/PaesslerAG/gval v0.1.0
-github.com/PaesslerAG/gval
