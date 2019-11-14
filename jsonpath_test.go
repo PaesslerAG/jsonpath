@@ -524,3 +524,85 @@ func typeOrder(o interface{}) int {
 		panic(fmt.Errorf("unknown type %T", o))
 	}
 }
+
+type customVariable interface {
+	Select(c context.Context, key gval.Evaluable, parameter interface{}) (interface{}, error)
+}
+
+type multiplier int
+
+func (m multiplier) Select(c context.Context, key gval.Evaluable, parameter interface{}) (interface{}, error) {
+	i, err := key.EvalInt(c, parameter)
+	if err != nil {
+		return nil, err
+	}
+
+	return int(m) * i, nil
+}
+
+func TestCustomVariableSelector(t *testing.T) {
+	lang := gval.NewLanguage(
+		jsonpath.Language(),
+		gval.VariableSelector(func(path gval.Evaluables) gval.Evaluable {
+			base := jsonpath.VariableSelector()
+
+			return func(c context.Context, v interface{}) (interface{}, error) {
+				for _, key := range path {
+					var err error
+
+					switch o := v.(type) {
+					case customVariable:
+						v, err = o.Select(c, key, v)
+					default:
+						v, err = base(gval.Evaluables{key})(c, v)
+					}
+					if err != nil {
+						return nil, err
+					}
+				}
+
+				return v, nil
+			}
+		}),
+	)
+
+	m := map[string]interface{}{
+		"a": 100,
+		"b": multiplier(100),
+	}
+
+	tests := []struct {
+		name string
+		path string
+		want interface{}
+	}{
+		{
+			name: "fallback",
+			path: "$.a",
+			want: 100,
+		},
+		{
+			name: "custom",
+			path: "$.b[10000]",
+			want: 100 * 10000,
+		},
+		{
+			name: "range",
+			path: "$.b[5:10]",
+			want: arr{500, 600, 700, 800, 900},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := lang.Evaluate(tt.path, m)
+			if err != nil {
+				t.Errorf("JSONPath(%s) error = %v", tt.path, err)
+				return
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("expected %v, but got %v", tt.want, got)
+			}
+		})
+	}
+}

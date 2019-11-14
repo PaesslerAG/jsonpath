@@ -28,10 +28,9 @@ func currentContext(c context.Context, v interface{}) context.Context {
 }
 
 //.x, [x]
-func directSelector(key gval.Evaluable) plainSelector {
+func directSelector(gv variableGetter, key gval.Evaluable) plainSelector {
 	return func(c context.Context, r, v interface{}) (interface{}, error) {
-
-		e, _, err := selectValue(c, key, r, v)
+		e, _, err := selectValue(c, gv, key, r, v)
 		if err != nil {
 			return nil, err
 		}
@@ -41,20 +40,20 @@ func directSelector(key gval.Evaluable) plainSelector {
 }
 
 // * / [*]
-func starSelector() ambiguousSelector {
+func starSelector(gv variableGetter) ambiguousSelector {
 	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
-		visitAll(v, func(key string, val interface{}) { match(key, val) })
+		visitAll(c, gv, v, func(key string, val interface{}) { match(key, val) })
 	}
 }
 
 // [x, ...]
-func multiSelector(keys []gval.Evaluable) ambiguousSelector {
+func multiSelector(gv variableGetter, keys []gval.Evaluable) ambiguousSelector {
 	if len(keys) == 0 {
-		return starSelector()
+		return starSelector(gv)
 	}
 	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
 		for _, k := range keys {
-			e, wildcard, err := selectValue(c, k, r, v)
+			e, wildcard, err := selectValue(c, gv, k, r, v)
 			if err != nil {
 				continue
 			}
@@ -63,67 +62,63 @@ func multiSelector(keys []gval.Evaluable) ambiguousSelector {
 	}
 }
 
-func selectValue(c context.Context, key gval.Evaluable, r, v interface{}) (value interface{}, jkey string, err error) {
+func selectValue(c context.Context, gv variableGetter, key gval.Evaluable, r, v interface{}) (value interface{}, jkey string, err error) {
 	c = currentContext(c, v)
-	switch o := v.(type) {
-	case []interface{}:
-		i, err := key.EvalInt(c, r)
-		if err != nil {
-			return nil, "", fmt.Errorf("could not select value, invalid key: %s", err)
-		}
-		if i < 0 || i >= len(o) {
-			return nil, "", fmt.Errorf("index %d out of bounds", i)
-		}
-		return o[i], strconv.Itoa(i), nil
-	case map[string]interface{}:
-		k, err := key.EvalString(c, r)
-		if err != nil {
-			return nil, "", fmt.Errorf("could not select value, invalid key: %s", err)
-		}
 
-		if r, ok := o[k]; ok {
-			return r, k, nil
-		}
-		return nil, "", fmt.Errorf("unknown key %s", k)
-
-	default:
-		return nil, "", fmt.Errorf("unsupported value type %T for select, expected map[string]interface{} or []interface{}", o)
+	ki, err := key.EvalString(c, r)
+	if err != nil {
+		return nil, "", fmt.Errorf("could not select value, invalid key: %s", err)
 	}
+
+	vi, err := gv.ForEvaluables(c, gval.Evaluables{key}, v)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return vi, ki, nil
 }
 
 //..
-func mapperSelector() ambiguousSelector {
-	return mapper
-}
-
-func mapper(c context.Context, r, v interface{}, match ambiguousMatcher) {
-	match([]interface{}{}, v)
-	visitAll(v, func(wildcard string, v interface{}) {
-		mapper(c, r, v, func(key interface{}, v interface{}) {
-			match(append([]interface{}{wildcard}, key.([]interface{})...), v)
+func mapperSelector(gv variableGetter) (mapper ambiguousSelector) {
+	mapper = func(c context.Context, r, v interface{}, match ambiguousMatcher) {
+		match([]interface{}{}, v)
+		visitAll(c, gv, v, func(wildcard string, v interface{}) {
+			mapper(c, r, v, func(key interface{}, v interface{}) {
+				match(append([]interface{}{wildcard}, key.([]interface{})...), v)
+			})
 		})
-	})
+	}
+	return
 }
 
-func visitAll(v interface{}, visit func(key string, v interface{})) {
+func visitAll(c context.Context, gv variableGetter, v interface{}, visit func(key string, v interface{})) {
 	switch v := v.(type) {
 	case []interface{}:
-		for i, e := range v {
+		for i := range v {
+			e, err := gv.ForConst(c, []interface{}{i}, v)
+			if err != nil {
+				continue
+			}
+
 			k := strconv.Itoa(i)
 			visit(k, e)
 		}
 	case map[string]interface{}:
-		for k, e := range v {
+		for k := range v {
+			e, err := gv.ForConst(c, []interface{}{k}, v)
+			if err != nil {
+				continue
+			}
+
 			visit(k, e)
 		}
 	}
-
 }
 
 //[? ]
-func filterSelector(filter gval.Evaluable) ambiguousSelector {
+func filterSelector(gv variableGetter, filter gval.Evaluable) ambiguousSelector {
 	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
-		visitAll(v, func(wildcard string, v interface{}) {
+		visitAll(c, gv, v, func(wildcard string, v interface{}) {
 			condition, err := filter.EvalBool(currentContext(c, v), r)
 			if err != nil {
 				return
@@ -136,13 +131,8 @@ func filterSelector(filter gval.Evaluable) ambiguousSelector {
 }
 
 //[::]
-func rangeSelector(min, max, step gval.Evaluable) ambiguousSelector {
+func rangeSelector(gv variableGetter, min, max, step gval.Evaluable) ambiguousSelector {
 	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
-		cs, ok := v.([]interface{})
-		if !ok {
-			return
-		}
-
 		c = currentContext(c, v)
 
 		min, err := min.EvalInt(c, r)
@@ -162,9 +152,17 @@ func rangeSelector(min, max, step gval.Evaluable) ambiguousSelector {
 			return
 		}
 
-		n := len(cs)
-		min = negmax(min, n)
-		max = negmax(max, n)
+		switch vt := v.(type) {
+		case []interface{}:
+			n := len(vt)
+			min = negmax(min, n)
+			max = negmax(max, n)
+		case map[string]interface{}:
+			// Ranging over a map is explicitly not supported.
+			return
+		default:
+			// Otherwise we hope the variable selector can do its job.
+		}
 
 		if step == 0 {
 			step = 1
@@ -172,11 +170,21 @@ func rangeSelector(min, max, step gval.Evaluable) ambiguousSelector {
 
 		if step > 0 {
 			for i := min; i < max; i += step {
-				match(strconv.Itoa(i), cs[i])
+				e, err := gv.ForConst(c, []interface{}{i}, v)
+				if err != nil {
+					continue
+				}
+
+				match(strconv.Itoa(i), e)
 			}
 		} else {
 			for i := max - 1; i >= min; i += step {
-				match(strconv.Itoa(i), cs[i])
+				e, err := gv.ForConst(c, []interface{}{i}, v)
+				if err != nil {
+					continue
+				}
+
+				match(strconv.Itoa(i), e)
 			}
 		}
 

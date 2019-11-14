@@ -11,6 +11,7 @@ import (
 
 type parser struct {
 	*gval.Parser
+	vg   variableGetter
 	path path
 }
 
@@ -26,7 +27,7 @@ func parseCurrentPath(ctx context.Context, gParser *gval.Parser) (r gval.Evaluab
 }
 
 func newParser(p *gval.Parser) *parser {
-	return &parser{Parser: p, path: plainPath{}}
+	return &parser{Parser: p, vg: variableGetter{p}, path: plainPath{}}
 }
 
 func (p *parser) parse(c context.Context) (r gval.Evaluable, err error) {
@@ -56,17 +57,17 @@ func (p *parser) parsePath(c context.Context) error {
 			}
 			keys = append(keys, []gval.Evaluable{
 				p.Const(0), p.Const(float64(math.MaxInt32)), p.Const(1)}[len(keys):]...)
-			p.appendAmbiguousSelector(rangeSelector(keys[0], keys[1], keys[2]))
+			p.appendAmbiguousSelector(rangeSelector(p.vg, keys[0], keys[1], keys[2]))
 		case '?':
 			if len(keys) != 1 {
 				return fmt.Errorf("filter needs exactly one key")
 			}
-			p.appendAmbiguousSelector(filterSelector(keys[0]))
+			p.appendAmbiguousSelector(filterSelector(p.vg, keys[0]))
 		default:
 			if len(keys) == 1 {
-				p.appendPlainSelector(directSelector(keys[0]))
+				p.appendPlainSelector(directSelector(p.vg, keys[0]))
 			} else {
-				p.appendAmbiguousSelector(multiSelector(keys))
+				p.appendAmbiguousSelector(multiSelector(p.vg, keys))
 			}
 		}
 		return p.parsePath(c)
@@ -82,13 +83,13 @@ func (p *parser) parseSelect(c context.Context) error {
 	scan := p.Scan()
 	switch scan {
 	case scanner.Ident:
-		p.appendPlainSelector(directSelector(p.Const(p.TokenText())))
+		p.appendPlainSelector(directSelector(p.vg, p.Const(p.TokenText())))
 		return p.parsePath(c)
 	case '.':
-		p.appendAmbiguousSelector(mapperSelector())
+		p.appendAmbiguousSelector(mapperSelector(p.vg))
 		return p.parseMapper(c)
 	case '*':
-		p.appendAmbiguousSelector(starSelector())
+		p.appendAmbiguousSelector(starSelector(p.vg))
 		return p.parsePath(c)
 	default:
 		return p.Expected("JSON select", scanner.Ident, '.', '*')
@@ -155,7 +156,7 @@ func (p *parser) parseMapper(c context.Context) error {
 	scan := p.Scan()
 	switch scan {
 	case scanner.Ident:
-		p.appendPlainSelector(directSelector(p.Const(p.TokenText())))
+		p.appendPlainSelector(directSelector(p.vg, p.Const(p.TokenText())))
 	case '[':
 		keys, seperator, err := p.parseBracket(c)
 
@@ -169,12 +170,12 @@ func (p *parser) parseMapper(c context.Context) error {
 			if len(keys) != 1 {
 				return fmt.Errorf("filter needs exactly one key")
 			}
-			p.appendAmbiguousSelector(filterSelector(keys[0]))
+			p.appendAmbiguousSelector(filterSelector(p.vg, keys[0]))
 		default:
-			p.appendAmbiguousSelector(multiSelector(keys))
+			p.appendAmbiguousSelector(multiSelector(p.vg, keys))
 		}
 	case '*':
-		p.appendAmbiguousSelector(starSelector())
+		p.appendAmbiguousSelector(starSelector(p.vg))
 	case '(':
 		return p.parseScript(c)
 	default:

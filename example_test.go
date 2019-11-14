@@ -2,12 +2,13 @@ package jsonpath_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/PaesslerAG/gval"
-
 	"github.com/PaesslerAG/jsonpath"
 )
 
@@ -134,4 +135,57 @@ func Example_gval() {
 	// Unordered output:
 	// device 1 -> fancy device
 	// subdevice 2 -> fancy subdevice
+}
+
+func Example_variableSelector() {
+	builder := gval.NewLanguage(
+		jsonpath.Language(),
+		gval.VariableSelector(func(path gval.Evaluables) gval.Evaluable {
+			base := jsonpath.VariableSelector()(path)
+
+			return func(c context.Context, v interface{}) (interface{}, error) {
+				v, err := base(c, v)
+				if err != nil {
+					return nil, err
+				}
+
+				if s, ok := v.(string); ok && strings.HasPrefix(s, "base64:") {
+					b, err := base64.StdEncoding.DecodeString(s[len("base64:"):])
+					if err != nil {
+						return nil, fmt.Errorf("could not decode base64 value: %v", err)
+					}
+
+					v = string(b)
+				}
+
+				return v, nil
+			}
+		}),
+	)
+
+	path, err := builder.NewEvaluable(`$.encoded`)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	var v interface{}
+	err = json.Unmarshal([]byte(`{
+		"encoded": "base64:SGVsbG8sIHdvcmxkIQ=="
+	}`), &v)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	decoded, err := path(context.Background(), v)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	fmt.Println(decoded)
+
+	// Output:
+	// Hello, world!
 }

@@ -35,6 +35,7 @@ var lang = gval.NewLanguage(
 	gval.Base(),
 	gval.PrefixExtension('$', parseRootPath),
 	gval.PrefixExtension('@', parseCurrentPath),
+	gval.VariableSelector(VariableSelector()),
 )
 
 //Language is the JSONPath Language
