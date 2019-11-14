@@ -445,6 +445,43 @@ func TestJsonPath(t *testing.T) {
 	}
 }
 
+func TestCustomLanguage(t *testing.T) {
+	lang := gval.NewLanguage(
+		gval.Base(),
+		gval.PrefixExtension('{', func(ctx context.Context, p *gval.Parser) (gval.Evaluable, error) {
+			if p.Scan() != '$' {
+				p.Camouflage("JSONPath expression")
+			}
+
+			e, err := jsonpath.Parse(ctx, p)
+			if err != nil {
+				return nil, err
+			}
+
+			switch p.Scan() {
+			case '}':
+			default:
+				return nil, p.Expected("JSONPath template", '}')
+			}
+
+			return e, nil
+		}),
+	)
+
+	tests := []jsonpathTest{
+		{
+			name: "template",
+			lang: lang,
+			path: `{ .foo.bar }`,
+			data: `{"foo": {"bar": ["baz", "quux"]}}`,
+			want: arr{"baz", "quux"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, tt.test)
+	}
+}
+
 func (tt jsonpathTest) test(t *testing.T) {
 	get, err := tt.lang.NewEvaluable(tt.path)
 	if (err != nil) != tt.wantParseErr {

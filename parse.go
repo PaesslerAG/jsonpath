@@ -9,6 +9,12 @@ import (
 	"github.com/PaesslerAG/gval"
 )
 
+// Parse parses the complete JSON path starting from the given parser location.
+// You can use it with, for example, gval.PrefixExtension.
+func Parse(ctx context.Context, p *gval.Parser) (gval.Evaluable, error) {
+	return parseRootPath(ctx, p)
+}
+
 type parser struct {
 	*gval.Parser
 	vg   variableGetter
