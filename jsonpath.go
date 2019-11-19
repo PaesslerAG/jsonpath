@@ -15,41 +15,51 @@ import (
 	"context"
 
 	"github.com/PaesslerAG/gval"
+	"github.com/generikvault/gvalstrings"
 )
 
 // New returns an selector for given JSONPath
 func New(path string) (gval.Evaluable, error) {
-	return lang.NewEvaluable(path)
+	return Language().NewEvaluable(path)
 }
 
 //Get executes given JSONPath on given value
 func Get(path string, value interface{}) (interface{}, error) {
-	eval, err := lang.NewEvaluable(path)
+	eval, err := New(path)
 	if err != nil {
 		return nil, err
 	}
 	return eval(context.Background(), value)
 }
 
-var lang = gval.NewLanguage(
-	gval.Base(),
-	gval.PrefixExtension('$', parseRootPath),
-	gval.PrefixExtension('@', parseCurrentPath),
-	gval.VariableSelector(VariableSelector()),
-)
+type Option func(p *parser)
 
-//Language is the JSONPath Language
-func Language() gval.Language {
-	return lang
+func AllowMissingKeys(allow bool) Option {
+	return func(p *parser) {
+		if allow {
+			p.path.mode = selectorDropErrors
+		} else {
+			p.path.mode = selectorKeepErrors
+		}
+	}
 }
 
-var placeholderExtension = gval.NewLanguage(
-	lang,
-	gval.PrefixExtension('{', parseJSONObject),
-	gval.PrefixExtension('#', parsePlaceholder),
-)
+//Language is the JSONPath Language
+func Language(opts ...Option) gval.Language {
+	return gval.NewLanguage(
+		gval.Base(),
+		gvalstrings.SingleQuoted(),
+		gval.PrefixExtension('$', parseRootPath(opts)),
+		gval.PrefixExtension('@', parseCurrentPath(opts)),
+		gval.VariableSelector(VariableSelector(VariableVisitorFuncs{})),
+	)
+}
 
 //PlaceholderExtension is the JSONPath Language with placeholder
-func PlaceholderExtension() gval.Language {
-	return placeholderExtension
+func PlaceholderExtension(opts ...Option) gval.Language {
+	return gval.NewLanguage(
+		Language(opts...),
+		gval.PrefixExtension('{', parseJSONObject(opts)),
+		gval.PrefixExtension('#', parsePlaceholder),
+	)
 }

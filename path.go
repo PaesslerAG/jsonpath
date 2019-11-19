@@ -1,103 +1,188 @@
 package jsonpath
 
-import "context"
+import (
+	"context"
 
-type path interface {
-	evaluate(c context.Context, parameter interface{}) (interface{}, error)
-	visitMatchs(c context.Context, r interface{}, visit pathMatcher)
-	withPlainSelector(plainSelector) path
-	withAmbiguousSelector(ambiguousSelector) path
+	"github.com/PaesslerAG/gval"
+)
+
+type PathValue struct {
+	Path  []string
+	Value interface{}
 }
 
-type plainPath []plainSelector
+// values allows us to represent a single value or multiple values under a
+// common interface.
+type values interface {
+	// get retrieves the value(s) as an interface.
+	get() interface{}
 
-type ambiguousMatcher func(key, v interface{})
+	// concat appends this value to the given destination, creating it if
+	// necessary.
+	concat(dest *values)
 
-func (p plainPath) evaluate(ctx context.Context, root interface{}) (interface{}, error) {
-	return p.evaluatePath(ctx, root, root)
+	// flatMap iterates over all values encapsulated by this value and returns a new
+	// values with the result.
+	flatMap(fn func(value) (values, error)) (values, error)
 }
 
-func (p plainPath) evaluatePath(ctx context.Context, root, value interface{}) (interface{}, error) {
-	var err error
-	for _, sel := range p {
-		value, err = sel(ctx, root, value)
+type value struct {
+	wildcards [][]string
+	value     interface{}
+}
+
+var _ values = value{}
+
+func (v value) get() interface{} { return v.value }
+
+func (v value) concat(dest *values) {
+	if *dest == nil {
+		*dest = v
+		return
+	}
+
+	switch r := (*dest).(type) {
+	case value:
+		*dest = valueSlice{r, v}
+	case valueSlice:
+		*dest = append(r, v)
+	}
+}
+
+func (v value) flatMap(fn func(value) (values, error)) (values, error) {
+	return fn(v)
+}
+
+func (v value) prefix(children values) values {
+	if len(v.wildcards) == 0 {
+		return children
+	}
+
+	vs, _ := children.flatMap(func(nv value) (values, error) {
+		nv.wildcards = append(append([][]string{}, v.wildcards...), nv.wildcards...)
+		return nv, nil
+	})
+	return vs
+}
+
+type valueSlice []value
+
+var _ values = valueSlice{}
+
+func (vs valueSlice) get() interface{} {
+	r := make([]interface{}, len(vs))
+	for i, v := range vs {
+		r[i] = v.get()
+	}
+	return r
+}
+
+func (vs valueSlice) concat(dest *values) {
+	if *dest == nil {
+		// Force initialization to a slice.
+		*dest = valueSlice{}
+	}
+
+	for _, v := range vs {
+		v.concat(dest)
+	}
+}
+
+func (vs valueSlice) flatMap(fn func(value) (values, error)) (values, error) {
+	var nvs values = valueSlice{}
+	for _, v := range vs {
+		nv, err := fn(v)
 		if err != nil {
 			return nil, err
+		} else if nv == nil {
+			continue
 		}
+
+		nv.concat(&nvs)
 	}
-	return value, nil
+
+	return nvs, nil
 }
 
-func (p plainPath) matcher(ctx context.Context, r interface{}, match ambiguousMatcher) ambiguousMatcher {
-	if len(p) == 0 {
-		return match
-	}
-	return func(k, v interface{}) {
-		res, err := p.evaluatePath(ctx, r, v)
-		if err == nil {
-			match(k, res)
+func eachValue(vs values, fn func(value) error) error {
+	_, err := vs.flatMap(func(v value) (values, error) {
+		if err := fn(v); err != nil {
+			return nil, err
 		}
-	}
-}
-
-func (p plainPath) visitMatchs(ctx context.Context, r interface{}, visit pathMatcher) {
-	res, err := p.evaluatePath(ctx, r, r)
-	if err == nil {
-		visit(nil, res)
-	}
-}
-
-func (p plainPath) withPlainSelector(selector plainSelector) path {
-	return append(p, selector)
-}
-func (p plainPath) withAmbiguousSelector(selector ambiguousSelector) path {
-	return &ambiguousPath{
-		parent: p,
-		branch: selector,
-	}
-}
-
-type ambiguousPath struct {
-	parent path
-	branch ambiguousSelector
-	ending plainPath
-}
-
-func (p *ambiguousPath) evaluate(ctx context.Context, parameter interface{}) (interface{}, error) {
-	matchs := []interface{}{}
-	p.visitMatchs(ctx, parameter, func(keys []interface{}, match interface{}) {
-		matchs = append(matchs, match)
+		return v, nil
 	})
-	return matchs, nil
+	return err
 }
 
-func (p *ambiguousPath) visitMatchs(ctx context.Context, r interface{}, visit pathMatcher) {
-	p.parent.visitMatchs(ctx, r, func(keys []interface{}, v interface{}) {
-		p.branch(ctx, r, v, p.ending.matcher(ctx, r, visit.matcher(keys)))
-	})
-}
+type selectorMode int
 
-func (p *ambiguousPath) branchMatcher(ctx context.Context, r interface{}, m ambiguousMatcher) ambiguousMatcher {
-	return func(k, v interface{}) {
-		p.branch(ctx, r, v, m)
+const (
+	selectorKeepErrors selectorMode = 1 + iota
+	selectorDropErrors
+)
+
+func (m selectorMode) coalesce(nm selectorMode) selectorMode {
+	if m == selectorDropErrors {
+		return m
 	}
+	return nm
 }
 
-func (p *ambiguousPath) withPlainSelector(selector plainSelector) path {
-	p.ending = append(p.ending, selector)
-	return p
+type pathSelector struct {
+	fn   selector
+	mode selectorMode
 }
-func (p *ambiguousPath) withAmbiguousSelector(selector ambiguousSelector) path {
-	return &ambiguousPath{
-		parent: p,
-		branch: selector,
+
+type path struct {
+	root      gval.Evaluable
+	mode      selectorMode
+	selectors []pathSelector
+}
+
+func (p *path) appendSelector(fn selector, mode selectorMode) {
+	p.selectors = append(p.selectors, pathSelector{fn, mode})
+}
+
+func (p *path) reduce(c context.Context, parameter interface{}) (values, error) {
+	rv, err := p.root(c, parameter)
+	if err != nil {
+		return nil, err
 	}
+
+	root := value{value: rv}
+
+	var apply func(vs values, mode selectorMode, rest []pathSelector) (values, error)
+	apply = func(vs values, mode selectorMode, rest []pathSelector) (values, error) {
+		if len(rest) == 0 {
+			return vs, nil
+		}
+
+		// Otherwise we have more traversal to do.
+		sel := rest[0]
+
+		return vs.flatMap(func(v value) (values, error) {
+			nvs, err := sel.fn(c, v.value)
+			if err != nil {
+				if mode == selectorDropErrors {
+					return nil, nil
+				}
+
+				return nil, err
+			}
+
+			return apply(v.prefix(nvs), mode.coalesce(sel.mode), rest[1:])
+		})
+	}
+
+	return apply(root, p.mode, p.selectors)
 }
 
-type pathMatcher func(keys []interface{}, match interface{})
-
-func (m pathMatcher) matcher(keys []interface{}) ambiguousMatcher {
-	return func(key, match interface{}) {
-		m(append(keys, key), match)
+func (p *path) evaluate(c context.Context, parameter interface{}) (interface{}, error) {
+	pvs, err := p.reduce(c, parameter)
+	if err != nil {
+		return nil, err
+	} else if pvs == nil {
+		return nil, nil
 	}
+	return pvs.get(), nil
 }

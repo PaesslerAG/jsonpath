@@ -140,27 +140,20 @@ func Example_gval() {
 func Example_variableSelector() {
 	builder := gval.NewLanguage(
 		jsonpath.Language(),
-		gval.VariableSelector(func(path gval.Evaluables) gval.Evaluable {
-			base := jsonpath.VariableSelector()(path)
-
-			return func(c context.Context, v interface{}) (interface{}, error) {
-				v, err := base(c, v)
-				if err != nil {
-					return nil, err
-				}
-
-				if s, ok := v.(string); ok && strings.HasPrefix(s, "base64:") {
+		gval.VariableSelector(jsonpath.ChildVariableSelector(func(ctx context.Context, v interface{}, key interface{}, next func(context.Context, jsonpath.PathValue) error) error {
+			return jsonpath.DefaultVariableVisitor().VisitChild(ctx, v, key, func(ctx context.Context, pv jsonpath.PathValue) error {
+				if s, ok := pv.Value.(string); ok && strings.HasPrefix(s, "base64:") {
 					b, err := base64.StdEncoding.DecodeString(s[len("base64:"):])
 					if err != nil {
-						return nil, fmt.Errorf("could not decode base64 value: %v", err)
+						return fmt.Errorf("could not decode base64 value: %v", err)
 					}
 
-					v = string(b)
+					pv.Value = string(b)
 				}
 
-				return v, nil
-			}
-		}),
+				return next(ctx, pv)
+			})
+		})),
 	)
 
 	path, err := builder.NewEvaluable(`$.encoded`)

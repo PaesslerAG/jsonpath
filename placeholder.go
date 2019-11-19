@@ -24,46 +24,49 @@ type keyValuePair struct {
 }
 
 type keyValueMatcher struct {
-	key     gval.Evaluable
-	matcher func(c context.Context, r interface{}, visit pathMatcher)
+	key  gval.Evaluable
+	path *path
 }
 
-func parseJSONObject(ctx context.Context, p *gval.Parser) (gval.Evaluable, error) {
-	evals := jsonObjectSlice{}
-	for {
-		switch p.Scan() {
-		default:
-			hasWildcard := false
+func parseJSONObject(opts []Option) func(ctx context.Context, p *gval.Parser) (gval.Evaluable, error) {
+	return func(ctx context.Context, p *gval.Parser) (gval.Evaluable, error) {
+		evals := jsonObjectSlice{}
+		for {
+			switch p.Scan() {
+			default:
+				hasWildcard := false
 
-			p.Camouflage("object", ',', '}')
-			key, err := p.ParseExpression(context.WithValue(ctx, hasPlaceholdersContextKey{}, &hasWildcard))
-			if err != nil {
-				return nil, err
-			}
-			if p.Scan() != ':' {
+				p.Camouflage("object", ',', '}')
+				key, err := p.ParseExpression(context.WithValue(ctx, hasPlaceholdersContextKey{}, &hasWildcard))
 				if err != nil {
-					return nil, p.Expected("object", ':')
+					return nil, err
 				}
+				if p.Scan() != ':' {
+					if err != nil {
+						return nil, p.Expected("object", ':')
+					}
+				}
+				e, err := parseJSONObjectElement(ctx, p, opts, hasWildcard, key)
+				if err != nil {
+					return nil, err
+				}
+				evals.addElements(e)
+			case ',':
+			case '}':
+				return evals.evaluable, nil
 			}
-			e, err := parseJSONObjectElement(ctx, p, hasWildcard, key)
-			if err != nil {
-				return nil, err
-			}
-			evals.addElements(e)
-		case ',':
-		case '}':
-			return evals.evaluable, nil
 		}
 	}
 }
 
-func parseJSONObjectElement(ctx context.Context, gParser *gval.Parser, hasWildcard bool, key gval.Evaluable) (jsonObject, error) {
+func parseJSONObjectElement(ctx context.Context, gParser *gval.Parser, opts []Option, hasWildcard bool, key gval.Evaluable) (jsonObject, error) {
 	if hasWildcard {
-		p := newParser(gParser)
+		var p *parser
 		switch gParser.Scan() {
 		case '$':
+			p = newParser(gParser, rootElement, opts)
 		case '@':
-			p.appendPlainSelector(currentElementSelector())
+			p = newParser(gParser, currentElement, opts)
 		default:
 			return nil, p.Expected("JSONPath key and value")
 		}
@@ -71,7 +74,7 @@ func parseJSONObjectElement(ctx context.Context, gParser *gval.Parser, hasWildca
 		if err := p.parsePath(ctx); err != nil {
 			return nil, err
 		}
-		return keyValueMatcher{key, p.path.visitMatchs}, nil
+		return keyValueMatcher{key, p.path}, nil
 	}
 	value, err := gParser.ParseExpression(ctx)
 	if err != nil {
@@ -93,15 +96,21 @@ func (kv keyValuePair) visitElements(c context.Context, v interface{}, visit key
 	return nil
 }
 
-func (kv keyValueMatcher) visitElements(c context.Context, v interface{}, visit keyValueVisitor) (err error) {
-	kv.matcher(c, v, func(keys []interface{}, match interface{}) {
-		key, er := kv.key.EvalString(context.WithValue(c, placeholdersContextKey{}, keys), v)
-		if er != nil {
-			err = er
+func (kv keyValueMatcher) visitElements(c context.Context, v interface{}, visit keyValueVisitor) error {
+	vs, err := kv.path.reduce(c, v)
+	if err != nil {
+		return err
+	}
+
+	return eachValue(vs, func(v value) error {
+		key, err := kv.key.EvalString(context.WithValue(c, placeholdersContextKey{}, v.wildcards), v)
+		if err != nil {
+			return err
 		}
-		visit(key, match)
+
+		visit(key, v.value)
+		return nil
 	})
-	return
 }
 
 func (j *jsonObjectSlice) addElements(e jsonObject) {
@@ -155,7 +164,7 @@ type placeholder int
 const allPlaceholders = placeholder(-1)
 
 func (key placeholder) evaluable(c context.Context, v interface{}) (interface{}, error) {
-	wildcards, ok := c.Value(placeholdersContextKey{}).([]interface{})
+	wildcards, ok := c.Value(placeholdersContextKey{}).([][]string)
 	if !ok || len(wildcards) <= int(key) {
 		return nil, fmt.Errorf("JSONPath placeholder #%d is not available", key)
 	}
@@ -164,18 +173,18 @@ func (key placeholder) evaluable(c context.Context, v interface{}) (interface{},
 		sb.WriteString("$")
 		quoteWildcardValues(&sb, wildcards)
 		return sb.String(), nil
+	} else if len(wildcards[int(key)]) == 1 {
+		return wildcards[int(key)][0], nil
 	}
 	return wildcards[int(key)], nil
 }
 
-func quoteWildcardValues(sb *bytes.Buffer, wildcards []interface{}) {
+func quoteWildcardValues(sb *bytes.Buffer, wildcards [][]string) {
 	for _, w := range wildcards {
-		if wildcards, ok := w.([]interface{}); ok {
-			quoteWildcardValues(sb, wildcards)
-			continue
+		for _, k := range w {
+			sb.WriteString(fmt.Sprintf("[%v]",
+				strconv.Quote(fmt.Sprint(k)),
+			))
 		}
-		sb.WriteString(fmt.Sprintf("[%v]",
-			strconv.Quote(fmt.Sprint(w)),
-		))
 	}
 }

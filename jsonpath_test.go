@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"testing"
 
 	"github.com/PaesslerAG/gval"
@@ -448,6 +449,7 @@ func TestJsonPath(t *testing.T) {
 func TestCustomLanguage(t *testing.T) {
 	lang := gval.NewLanguage(
 		gval.Base(),
+		gval.VariableSelector(jsonpath.DefaultVariableSelector()),
 		gval.PrefixExtension('{', func(ctx context.Context, p *gval.Parser) (gval.Evaluable, error) {
 			if p.Scan() != '$' {
 				p.Camouflage("JSONPath expression")
@@ -511,7 +513,9 @@ func (tt jsonpathTest) test(t *testing.T) {
 	}
 
 	if tt.reorder {
-		reorder(got.(arr))
+		if garr, ok := got.(arr); ok {
+			reorder(garr)
+		}
 	}
 
 	if !reflect.DeepEqual(got, tt.want) {
@@ -563,44 +567,40 @@ func typeOrder(o interface{}) int {
 }
 
 type customVariable interface {
-	Select(c context.Context, key gval.Evaluable, parameter interface{}) (interface{}, error)
+	Select(c context.Context, key int, parameter interface{}) (interface{}, error)
 }
 
 type multiplier int
 
-func (m multiplier) Select(c context.Context, key gval.Evaluable, parameter interface{}) (interface{}, error) {
-	i, err := key.EvalInt(c, parameter)
-	if err != nil {
-		return nil, err
-	}
-
-	return int(m) * i, nil
+func (m multiplier) Select(c context.Context, key int, parameter interface{}) (interface{}, error) {
+	return int(m) * key, nil
 }
 
 func TestCustomVariableSelector(t *testing.T) {
 	lang := gval.NewLanguage(
 		jsonpath.Language(),
-		gval.VariableSelector(func(path gval.Evaluables) gval.Evaluable {
-			base := jsonpath.VariableSelector()
-
-			return func(c context.Context, v interface{}) (interface{}, error) {
-				for _, key := range path {
-					var err error
-
-					switch o := v.(type) {
-					case customVariable:
-						v, err = o.Select(c, key, v)
-					default:
-						v, err = base(gval.Evaluables{key})(c, v)
-					}
-					if err != nil {
-						return nil, err
-					}
+		gval.VariableSelector(jsonpath.ChildVariableSelector(func(ctx context.Context, parameter interface{}, key interface{}, next func(context.Context, jsonpath.PathValue) error) error {
+			switch o := parameter.(type) {
+			case customVariable:
+				var i int
+				if ki, ok := key.(int); ok {
+					i = ki
+				} else if kf, ok := key.(float64); ok {
+					i = int(kf)
+				} else {
+					break
 				}
 
-				return v, nil
+				v, err := o.Select(ctx, i, parameter)
+				if err != nil {
+					return err
+				}
+
+				return next(ctx, jsonpath.PathValue{Path: []string{strconv.Itoa(i)}, Value: v})
 			}
-		}),
+
+			return jsonpath.DefaultVariableVisitor().VisitChild(ctx, parameter, key, next)
+		})),
 	)
 
 	m := map[string]interface{}{
