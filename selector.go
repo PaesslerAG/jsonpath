@@ -3,9 +3,9 @@ package jsonpath
 import (
 	"context"
 	"fmt"
-	"strconv"
-
 	"github.com/PaesslerAG/gval"
+	"reflect"
+	"strconv"
 )
 
 //plainSelector evaluate exactly one result
@@ -116,9 +116,18 @@ func visitAll(v interface{}, visit func(key string, v interface{})) {
 		for k, e := range v {
 			visit(k, e)
 		}
+	case interface{}:
+		vo := reflect.ValueOf(v)
+		if vo.Kind() == reflect.Map {
+			for _, vok := range vo.MapKeys() {
+				if vok.Kind() == reflect.String || vok.Kind() == reflect.Int {
+					visit(vok.String(), vo.MapIndex(vok).Interface())
+				}
+			}
+		}
 	}
-
 }
+
 
 //[? ]
 func filterSelector(filter gval.Evaluable) ambiguousSelector {
