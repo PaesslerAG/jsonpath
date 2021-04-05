@@ -189,7 +189,7 @@ func (p *parser) parseScript(c context.Context) error {
 		return err
 	}
 	if p.Scan() != ')' {
-		return p.Expected("jsnopath script", ')')
+		return p.Expected("jsonpath script", ')')
 	}
 	p.appendPlainSelector(newScript(script))
 	return p.parsePath(c)
