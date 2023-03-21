@@ -48,10 +48,16 @@ func TestJsonPath(t *testing.T) {
 			want: "hey",
 		},
 		{
-			name:    "negativ select array",
-			path:    "$[-1]",
-			data:    `[7, "hey"]`,
-			wantErr: true,
+			name: "negativ select array",
+			path: "$[-1]",
+			data: `[7, "hey"]`,
+			want: "hey",
+		},
+		{
+			name: "negativ select on short array",
+			path: "$[-2]",
+			data: `[7]`,
+			want: nil,
 		},
 		{
 			name: "simple select object",
@@ -60,10 +66,10 @@ func TestJsonPath(t *testing.T) {
 			want: "aa",
 		},
 		{
-			name:    "simple select out of bounds",
-			path:    "$[1]",
-			data:    `["hey"]`,
-			wantErr: true,
+			name: "simple select out of bounds",
+			path: "$[1]",
+			data: `["hey"]`,
+			want: nil,
 		},
 		{
 			name:    "simple select unknown key",
@@ -448,7 +454,7 @@ func TestJsonPath(t *testing.T) {
 func (tt jsonpathTest) test(t *testing.T) {
 	get, err := tt.lang.NewEvaluable(tt.path)
 	if (err != nil) != tt.wantParseErr {
-		t.Fatalf("New() error = %v, wantErr %v", err, tt.wantErr)
+		t.Fatalf("[%s]: New() error = %v, wantErr %v", tt.name, err, tt.wantErr)
 	}
 	if tt.wantParseErr {
 		return
@@ -456,20 +462,20 @@ func (tt jsonpathTest) test(t *testing.T) {
 	var v interface{}
 	err = json.Unmarshal([]byte(tt.data), &v)
 	if err != nil {
-		t.Fatalf("could not parse json input: %v", err)
+		t.Fatalf("[%s]: could not parse json input: %v", tt.name, err)
 	}
 	got, err := get(context.Background(), v)
 
 	if tt.wantErr {
 		if err == nil {
-			t.Errorf("expected error %v but got %v", tt.wantErr, got)
+			t.Errorf("[%s]: expected error %v but got %v", tt.name, tt.wantErr, got)
 			return
 		}
 		return
 	}
 
 	if err != nil {
-		t.Errorf("JSONPath(%s) error = %v", tt.path, err)
+		t.Errorf("[%s]: JSONPath(%s) error = %v", tt.name, tt.path, err)
 		return
 	}
 
@@ -478,7 +484,7 @@ func (tt jsonpathTest) test(t *testing.T) {
 	}
 
 	if !reflect.DeepEqual(got, tt.want) {
-		t.Fatalf("expected %v, but got %v", tt.want, got)
+		t.Fatalf("[%s]: expected %v, but got %v", tt.name, tt.want, got)
 	}
 }
 
