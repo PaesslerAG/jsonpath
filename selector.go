@@ -64,8 +64,11 @@ func multiSelector(keys []gval.Evaluable) ambiguousSelector {
 }
 
 func selectValue(c context.Context, key gval.Evaluable, r, v interface{}) (value interface{}, jkey string, err error) {
+
 	c = currentContext(c, v)
+
 	switch o := v.(type) {
+
 	case []interface{}:
 		i, err := key.EvalInt(c, r)
 		if err != nil {
@@ -79,6 +82,7 @@ func selectValue(c context.Context, key gval.Evaluable, r, v interface{}) (value
 			return nil, strconv.Itoa(i), nil
 		}
 		return o[p], strconv.Itoa(i), nil
+
 	case map[string]interface{}:
 		k, err := key.EvalString(c, r)
 		if err != nil {
@@ -90,8 +94,38 @@ func selectValue(c context.Context, key gval.Evaluable, r, v interface{}) (value
 		}
 		return nil, "", fmt.Errorf("unknown key %s", k)
 
+	case Array:
+		i, err := key.EvalInt(c, r)
+		if err != nil {
+			return nil, "", fmt.Errorf("could not select value, invalid key: %s", err)
+		}
+		p := i
+		if i < 0 {
+			p = o.Len() + i
+		}
+		if p < 0 || p >= o.Len() {
+			return nil, strconv.Itoa(i), nil
+		}
+		r, err := o.SelectGVal(c, strconv.Itoa(p))
+		if err != nil {
+			return nil, "", err
+		}
+		return r, strconv.Itoa(i), nil
+
+	case Object:
+		k, err := key.EvalString(c, r)
+		if err != nil {
+			return nil, "", fmt.Errorf("could not select value, invalid key: %s", err)
+		}
+
+		r, err := o.SelectGVal(c, k)
+		if err != nil {
+			return nil, "", err
+		}
+		return r, k, nil
+
 	default:
-		return nil, "", fmt.Errorf("unsupported value type %T for select, expected map[string]interface{} or []interface{}", o)
+		return nil, "", fmt.Errorf("unsupported value type %T for select, expected map[string]interface{}, []interface{} or Array", o)
 	}
 }
 
@@ -110,18 +144,26 @@ func mapper(c context.Context, r, v interface{}, match ambiguousMatcher) {
 }
 
 func visitAll(v interface{}, visit func(key string, v interface{})) {
+
 	switch v := v.(type) {
+
 	case []interface{}:
 		for i, e := range v {
 			k := strconv.Itoa(i)
 			visit(k, e)
 		}
+
 	case map[string]interface{}:
 		for k, e := range v {
 			visit(k, e)
 		}
-	}
 
+	case Array:
+		v.ForEach(visit)
+
+	case Object:
+		v.ForEach(visit)
+	}
 }
 
 // [? ]
@@ -141,11 +183,8 @@ func filterSelector(filter gval.Evaluable) ambiguousSelector {
 
 // [::]
 func rangeSelector(min, max, step gval.Evaluable) ambiguousSelector {
+
 	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
-		cs, ok := v.([]interface{})
-		if !ok {
-			return
-		}
 
 		c = currentContext(c, v)
 
@@ -162,28 +201,55 @@ func rangeSelector(min, max, step gval.Evaluable) ambiguousSelector {
 			return
 		}
 
-		if min > max {
-			return
-		}
-
-		n := len(cs)
-		min = negmax(min, n)
-		max = negmax(max, n)
-
 		if step == 0 {
 			step = 1
 		}
 
-		if step > 0 {
-			for i := min; i < max; i += step {
-				match(strconv.Itoa(i), cs[i])
+		// process v
+		switch o := v.(type) {
+
+		case []interface{}:
+			n := len(o)
+			min = negmax(min, n)
+			max = negmax(max, n)
+
+			if min > max {
+				return
 			}
-		} else {
-			for i := max - 1; i >= min; i += step {
-				match(strconv.Itoa(i), cs[i])
+
+			if step > 0 {
+				for i := min; i < max; i += step {
+					match(strconv.Itoa(i), o[i])
+				}
+			} else {
+				for i := max - 1; i >= min; i += step {
+					match(strconv.Itoa(i), o[i])
+				}
+			}
+
+		case Array:
+			n := o.Len()
+			min = negmax(min, n)
+			max = negmax(max, n)
+
+			if min > max {
+				return
+			}
+
+			if step > 0 {
+				for i := min; i < max; i += step {
+					k := strconv.Itoa(i)
+					r, _ := o.SelectGVal(c, k)
+					match(k, r)
+				}
+			} else {
+				for i := max - 1; i >= min; i += step {
+					k := strconv.Itoa(i)
+					r, _ := o.SelectGVal(c, k)
+					match(k, r)
+				}
 			}
 		}
-
 	}
 }
 
