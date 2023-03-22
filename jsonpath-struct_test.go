@@ -35,9 +35,9 @@ func (array ArrayLike) ForEach(callback func(key string, v interface{})) {
 	}
 }
 
-type ObjectLike1 map[string]int
+type ObjectLike map[string]int
 
-func (object ObjectLike1) SelectGVal(c context.Context, key string) (interface{}, error) {
+func (object ObjectLike) SelectGVal(c context.Context, key string) (interface{}, error) {
 	// check field exists
 	if v, ok := object[key]; ok {
 		return v, nil
@@ -45,7 +45,7 @@ func (object ObjectLike1) SelectGVal(c context.Context, key string) (interface{}
 	return nil, nil
 }
 
-func (object ObjectLike1) ForEach(callback func(key string, v interface{})) {
+func (object ObjectLike) ForEach(callback func(key string, v interface{})) {
 	// loop
 	for k, v := range object {
 		callback(k, v)
@@ -86,6 +86,17 @@ func TestArraySelectors(t *testing.T) {
 
 func TestObjectSelectors(t *testing.T) {
 	// init
+	object := &ObjectLike{
+		"a": 1,
+		"b": -1,
+	}
+	// assert
+	assert(t, "$.a", object, 1)
+	assert(t, "$.b", object, -1)
+}
+
+func TestStructSelectors(t *testing.T) {
+	// init
 	s := &MyStruct{
 		a: "v1",
 		b: "v2",
@@ -93,17 +104,6 @@ func TestObjectSelectors(t *testing.T) {
 	// assert
 	assert(t, "$.a", s, "v1")
 	assert(t, "$.b", s, "v2")
-}
-
-func TestStructSelectors(t *testing.T) {
-	// init
-	object := &ObjectLike1{
-		"a": 1,
-		"b": -1,
-	}
-	// assert
-	assert(t, "$.a", object, 1)
-	assert(t, "$.b", object, -1)
 }
 
 func assert(t *testing.T, path string, value interface{}, expected interface{}) {
