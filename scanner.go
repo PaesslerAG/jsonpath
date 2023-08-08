@@ -43,12 +43,8 @@ import (
 // literal tokens including Go identifiers. Comments will be skipped.
 
 // The result of Scan is one of these tokens or a Unicode character.
-const (
-	quotedString     = goscanner.Comment + 2
-	scanQuotedString = 1 << -quotedString
-)
 
-const jsonpathTokens = goscanner.ScanIdents | goscanner.ScanFloats | goscanner.ScanChars |
+const jsonpathTokens = goscanner.ScanIdents | goscanner.ScanFloats |
 	goscanner.ScanStrings | goscanner.ScanComments | goscanner.SkipComments
 
 const bufLen = 1024 // at least utf8.UTFMax
@@ -587,17 +583,6 @@ func (s *scanner) scanString(quote rune) (n int) {
 	return
 }
 
-func (s *scanner) scanChar() rune {
-	if s.Mode&scanQuotedString != 0 {
-		s.scanString('\'')
-		return goscanner.String
-	}
-	if s.scanString('\'') != 1 {
-		s.error("invalid char literal")
-	}
-	return goscanner.Char
-}
-
 func (s *scanner) scanComment(ch rune) rune {
 	// ch == '/' || ch == '*'
 	if ch == '/' {
@@ -690,8 +675,9 @@ redo:
 			}
 			ch = s.next()
 		case '\'':
-			if s.Mode&goscanner.ScanChars != 0 {
-				tok = s.scanChar()
+			if s.Mode&goscanner.ScanStrings != 0 {
+				s.scanString('\'')
+				tok = goscanner.String
 			}
 			ch = s.next()
 		case '.':
