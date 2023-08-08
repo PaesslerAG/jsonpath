@@ -112,7 +112,7 @@ type scanner struct {
 	goscanner.Position
 }
 
-func createScanner() gval.Scanner {
+func CreateScanner() gval.Scanner {
 	return &scanner{}
 }
 

@@ -50,7 +50,7 @@ var lang = func() gval.Language {
 		gval.PrefixExtension('$', parseRootPath),
 		gval.PrefixExtension('@', parseCurrentPath),
 	)
-	l.CreateScanner(createScanner)
+	l.CreateScanner(CreateScanner)
 	return l
 }()
 
@@ -65,7 +65,7 @@ var placeholderExtension = func() gval.Language {
 		gval.PrefixExtension('{', parseJSONObject),
 		gval.PrefixExtension('#', parsePlaceholder),
 	)
-	l.CreateScanner(createScanner)
+	l.CreateScanner(CreateScanner)
 	return l
 }()
 
