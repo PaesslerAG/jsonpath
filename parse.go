@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"text/scanner"
+	goscanner "text/scanner"
 
 	"github.com/PaesslerAG/gval"
 )
@@ -81,7 +81,7 @@ func (p *parser) parsePath(c context.Context) error {
 func (p *parser) parseSelect(c context.Context) error {
 	scan := p.Scan()
 	switch scan {
-	case scanner.Ident:
+	case goscanner.Ident:
 		p.appendPlainSelector(directSelector(p.Const(p.TokenText())))
 		return p.parsePath(c)
 	case '.':
@@ -91,7 +91,7 @@ func (p *parser) parseSelect(c context.Context) error {
 		p.appendAmbiguousSelector(starSelector())
 		return p.parsePath(c)
 	default:
-		return p.Expected("JSON select", scanner.Ident, '.', '*')
+		return p.Expected("JSON select", goscanner.Ident, '.', '*')
 	}
 }
 
@@ -154,7 +154,7 @@ func (p *parser) parseBracket(c context.Context) (keys []gval.Evaluable, seperat
 func (p *parser) parseMapper(c context.Context) error {
 	scan := p.Scan()
 	switch scan {
-	case scanner.Ident:
+	case goscanner.Ident:
 		p.appendPlainSelector(directSelector(p.Const(p.TokenText())))
 	case '[':
 		keys, seperator, err := p.parseBracket(c)
@@ -178,7 +178,7 @@ func (p *parser) parseMapper(c context.Context) error {
 	case '(':
 		return p.parseScript(c)
 	default:
-		return p.Expected("JSON mapper", '[', scanner.Ident, '*')
+		return p.Expected("JSON mapper", '[', goscanner.Ident, '*')
 	}
 	return p.parsePath(c)
 }

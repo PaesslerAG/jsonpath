@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"text/scanner"
+	goscanner "text/scanner"
 
 	"github.com/PaesslerAG/gval"
 )
@@ -134,7 +134,7 @@ func parsePlaceholder(c context.Context, p *gval.Parser) (gval.Evaluable, error)
 	}
 	*(hasWildcard.(*bool)) = true
 	switch p.Scan() {
-	case scanner.Int:
+	case goscanner.Int:
 		id, err := strconv.Atoi(p.TokenText())
 		if err != nil {
 			return nil, err
