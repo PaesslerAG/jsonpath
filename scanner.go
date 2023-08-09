@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	goscanner "text/scanner"
 	"unicode"
 	"unicode/utf8"
@@ -160,11 +159,7 @@ func (s *scanner) GetPosition() goscanner.Position {
 }
 
 func (s *scanner) Unquote(in string) (string, error) {
-	// Hack: Replace single quotes with double quotes.
-	if n := len(in); n > 1 && in[0] == '\'' && in[n-1] == '\'' {
-		in = `"` + in[1:n-1] + `"`
-	}
-	return strconv.Unquote(in)
+	return unquote(in)
 }
 
 // InitMode initializes a Scanner with a new source and returns s.
