@@ -1,7 +1,15 @@
+package jsonpath
+
 // Copyright 2009 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-package jsonpath
+// This is mainly taken from
+//
+// https://cs.opensource.google/go/go/+/refs/tags/go1.21.0:src/strconv/quote.go
+//
+// and adjusted to meet the needs of unquoting JSONPath strings.
+// Mainly handling single quoted strings right and removed support for
+// Go raw strings.
 
 import (
 	"strconv"

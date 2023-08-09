@@ -1,18 +1,13 @@
+package jsonpath
+
 // Copyright 2009 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-
-// Package scanner provides a scanner and tokenizer for UTF-8-encoded text.
-// It takes an io.Reader providing the source, which then can be tokenized
-// through repeated calls to the Scan function. For compatibility with
-// existing tools, the NUL character is not allowed. If the first character
-// in the source is a UTF-8 encoded byte order mark (BOM), it is discarded.
+// This is mainly taken from
 //
-// By default, a Scanner skips white space and Go comments and recognizes all
-// literals as defined by the Go language specification. It may be
-// customized to recognize only a subset of those literals and to recognize
-// different identifier and white space characters.
-package jsonpath
+// https://cs.opensource.google/go/go/+/refs/tags/go1.21.0:src/text/scanner/scanner.go
+//
+// and adjusted to meet the needs of parsing JSONPath expressions.
 
 import (
 	"bytes"
@@ -26,29 +21,12 @@ import (
 	"github.com/PaesslerAG/gval"
 )
 
-// Predefined mode bits to control recognition of tokens. For instance,
-// to configure a Scanner such that it only recognizes (Go) identifiers,
-// integers, and skips comments, set the Scanner's Mode field to:
-//
-//	ScanIdents | ScanInts | SkipComments
-//
-// With the exceptions of comments, which are skipped if SkipComments is
-// set, unrecognized tokens are not ignored. Instead, the scanner simply
-// returns the respective individual characters (or possibly sub-tokens).
-// For instance, if the mode is ScanIdents (not ScanStrings), the string
-// "foo" is scanned as the token sequence '"' Ident '"'.
-//
-// Use GoTokens to configure the Scanner such that it accepts all Go
-// literal tokens including Go identifiers. Comments will be skipped.
-
-// The result of Scan is one of these tokens or a Unicode character.
-
 const jsonpathTokens = goscanner.ScanIdents | goscanner.ScanFloats |
 	goscanner.ScanStrings | goscanner.ScanComments | goscanner.SkipComments
 
 const bufLen = 1024 // at least utf8.UTFMax
 
-// A scanner implements reading of Unicode characters and tokens from an io.Reader.
+// A scanner implements a [github.com/PaesslerAG/gval/Scanner].
 type scanner struct {
 	// Input
 	src io.Reader
@@ -111,6 +89,7 @@ type scanner struct {
 	goscanner.Position
 }
 
+// CreateScanner returns new Scanner suitable to scan JSONPath expressions.
 func CreateScanner() gval.Scanner {
 	return &scanner{}
 }
