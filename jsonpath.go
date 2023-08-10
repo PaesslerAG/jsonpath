@@ -44,22 +44,30 @@ func Get(path string, value interface{}) (interface{}, error) {
 	return eval(context.Background(), value)
 }
 
-var lang = gval.NewLanguage(
-	gval.Base(),
-	gval.PrefixExtension('$', parseRootPath),
-	gval.PrefixExtension('@', parseCurrentPath),
-)
+var lang = func() gval.Language {
+	l := gval.NewLanguage(
+		gval.Base(),
+		gval.PrefixExtension('$', parseRootPath),
+		gval.PrefixExtension('@', parseCurrentPath),
+	)
+	l.CreateScanner(CreateScanner)
+	return l
+}()
 
 // Language is the JSONPath Language
 func Language() gval.Language {
 	return lang
 }
 
-var placeholderExtension = gval.NewLanguage(
-	lang,
-	gval.PrefixExtension('{', parseJSONObject),
-	gval.PrefixExtension('#', parsePlaceholder),
-)
+var placeholderExtension = func() gval.Language {
+	l := gval.NewLanguage(
+		lang,
+		gval.PrefixExtension('{', parseJSONObject),
+		gval.PrefixExtension('#', parsePlaceholder),
+	)
+	l.CreateScanner(CreateScanner)
+	return l
+}()
 
 // PlaceholderExtension is the JSONPath Language with placeholder
 func PlaceholderExtension() gval.Language {

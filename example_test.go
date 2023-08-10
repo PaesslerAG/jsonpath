@@ -79,6 +79,29 @@ func ExampleGet_filter() {
 	// II
 }
 
+func ExampleGet_filterQuoted() {
+	v := interface{}(nil)
+
+	json.Unmarshal([]byte(`[
+		{"key":"alpha","value" : "I"},
+		{"key":"beta","value" : "II"},
+		{"key":"gamma","value" : "III"}
+		]`), &v)
+
+	values, err := jsonpath.Get(`$[? @.key=='beta'].value`, v)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	for _, value := range values.([]interface{}) {
+		fmt.Println(value)
+	}
+
+	// Output:
+	// II
+}
+
 func Example_gval() {
 	builder := gval.Full(jsonpath.PlaceholderExtension())
 
