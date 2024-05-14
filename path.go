@@ -1,9 +1,16 @@
 package jsonpath
 
-import "context"
+import (
+	"bytes"
+	"context"
+)
+
+// Exported for testing purposes
+type CollectFullPathsContextKey struct{}
 
 type path interface {
 	evaluate(c context.Context, parameter interface{}) (interface{}, error)
+	evaluateWithPaths(c context.Context, parameter interface{}) (interface{}, error)
 	visitMatchs(c context.Context, r interface{}, visit pathMatcher)
 	withPlainSelector(plainSelector) path
 	withAmbiguousSelector(ambiguousSelector) path
@@ -14,18 +21,30 @@ type plainPath []plainSelector
 type ambiguousMatcher func(key, v interface{})
 
 func (p plainPath) evaluate(ctx context.Context, root interface{}) (interface{}, error) {
-	return p.evaluatePath(ctx, root, root)
+	_, value, err := p.evaluatePath(ctx, root, root)
+	return value, err
 }
 
-func (p plainPath) evaluatePath(ctx context.Context, root, value interface{}) (interface{}, error) {
-	var err error
+func (p plainPath) evaluateWithPaths(ctx context.Context, root interface{}) (interface{}, error) {
+	keys, value, err := p.evaluatePath(ctx, root, root)
+	m := map[string]interface{}{}
+	m[toJSONPath(keys)] = value
+	return m, err
+}
+
+func (p plainPath) evaluatePath(ctx context.Context, root, value interface{}) ([]interface{}, interface{}, error) {
+	keys := []interface{}{}
 	for _, sel := range p {
-		value, err = sel(ctx, root, value)
+		k, v, err := sel(ctx, root, value)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		if k != nil {
+			keys = append(keys, k)
+		}
+		value = v
 	}
-	return value, nil
+	return keys, value, nil
 }
 
 func (p plainPath) matcher(ctx context.Context, r interface{}, match ambiguousMatcher) ambiguousMatcher {
@@ -33,17 +52,22 @@ func (p plainPath) matcher(ctx context.Context, r interface{}, match ambiguousMa
 		return match
 	}
 	return func(k, v interface{}) {
-		res, err := p.evaluatePath(ctx, r, v)
+		keys := k
+		collectFullPaths := ctx.Value(CollectFullPathsContextKey{})
+		ks, res, err := p.evaluatePath(ctx, r, v)
+		if b, ok := collectFullPaths.(bool); ok && b {
+			keys = append(ks, k)
+		}
 		if err == nil {
-			match(k, res)
+			match(keys, res)
 		}
 	}
 }
 
 func (p plainPath) visitMatchs(ctx context.Context, r interface{}, visit pathMatcher) {
-	res, err := p.evaluatePath(ctx, r, r)
+	keys, res, err := p.evaluatePath(ctx, r, r)
 	if err == nil {
-		visit(nil, res)
+		visit(keys, res)
 	}
 }
 
@@ -69,6 +93,20 @@ func (p *ambiguousPath) evaluate(ctx context.Context, parameter interface{}) (in
 		matchs = append(matchs, match)
 	})
 	return matchs, nil
+}
+
+func (p *ambiguousPath) evaluateWithPaths(ctx context.Context, parameter interface{}) (interface{}, error) {
+	m := map[string]interface{}{}
+	matchs := []interface{}{}
+	wildcards := []interface{}{}
+	p.visitMatchs(ctx, parameter, func(keys []interface{}, match interface{}) {
+		matchs = append(matchs, match)
+		wildcards = append(wildcards, keys)
+	})
+	for i, w := range wildcards {
+		m[toJSONPath(convertPath(w.([]interface{})))] = matchs[i]
+	}
+	return m, nil
 }
 
 func (p *ambiguousPath) visitMatchs(ctx context.Context, r interface{}, visit pathMatcher) {
@@ -100,4 +138,33 @@ func (m pathMatcher) matcher(keys []interface{}) ambiguousMatcher {
 	return func(key, match interface{}) {
 		m(append(keys, key), match)
 	}
+}
+
+func convertPath(segments []interface{}) []interface{} {
+	paths := []interface{}{}
+	sCount := len(segments)
+
+	for i, sRaw := range segments {
+		if s, ok := sRaw.([]interface{}); ok {
+			liIndex := len(s) - 1
+
+			if liIndex >= 0 && i == sCount-1 {
+				s = convertPath(append([]interface{}{s[liIndex]}, s[:liIndex]...))
+			}
+
+			paths = append(paths, convertPath(s)...)
+		} else {
+			paths = append(paths, sRaw)
+		}
+	}
+
+	return paths
+}
+
+func toJSONPath(segments []interface{}) string {
+	sb := bytes.Buffer{}
+	sb.WriteString("$")
+	quoteWildcardValues(&sb, convertPath(segments))
+
+	return sb.String()
 }
