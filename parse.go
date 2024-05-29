@@ -22,7 +22,23 @@ func parseRootPath(ctx context.Context, gParser *gval.Parser) (r gval.Evaluable,
 func parseCurrentPath(ctx context.Context, gParser *gval.Parser) (r gval.Evaluable, err error) {
 	p := newParser(gParser)
 	p.appendPlainSelector(currentElementSelector())
-	return p.parse(ctx)
+	eval, err := p.parse(ctx)
+	// We always want to ensure that the machinery to collect values with paths is circumvented for current path
+	return func(ctx context.Context, parameter interface{}) (interface{}, error) {
+		if err != nil {
+			return nil, err
+		}
+		value, err := eval(ctx, parameter)
+		collectFullPaths := ctx.Value(CollectFullPathsContextKey{})
+		if b, ok := collectFullPaths.(bool); ok && b {
+			if m, ok := value.(map[string]interface{}); ok {
+				for _, v := range m {
+					return v, nil
+				}
+			}
+		}
+		return value, err
+	}, nil
 }
 
 func newParser(p *gval.Parser) *parser {
@@ -31,9 +47,12 @@ func newParser(p *gval.Parser) *parser {
 
 func (p *parser) parse(c context.Context) (r gval.Evaluable, err error) {
 	err = p.parsePath(c)
-
 	if err != nil {
 		return nil, err
+	}
+	collectFullPaths := c.Value(CollectFullPathsContextKey{})
+	if b, ok := collectFullPaths.(bool); ok && b {
+		return p.path.evaluateWithPaths, nil
 	}
 	return p.path.evaluate, nil
 }

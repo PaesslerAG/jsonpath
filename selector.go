@@ -9,15 +9,15 @@ import (
 )
 
 // plainSelector evaluate exactly one result
-type plainSelector func(c context.Context, r, v interface{}) (interface{}, error)
+type plainSelector func(c context.Context, r, v interface{}) (interface{}, interface{}, error)
 
 // ambiguousSelector evaluate wildcard
 type ambiguousSelector func(c context.Context, r, v interface{}, match ambiguousMatcher)
 
 // @
 func currentElementSelector() plainSelector {
-	return func(c context.Context, r, v interface{}) (interface{}, error) {
-		return c.Value(currentElement{}), nil
+	return func(c context.Context, r, v interface{}) (interface{}, interface{}, error) {
+		return nil, c.Value(currentElement{}), nil
 	}
 }
 
@@ -29,14 +29,14 @@ func currentContext(c context.Context, v interface{}) context.Context {
 
 // .x, [x]
 func directSelector(key gval.Evaluable) plainSelector {
-	return func(c context.Context, r, v interface{}) (interface{}, error) {
+	return func(c context.Context, r, v interface{}) (interface{}, interface{}, error) {
 
-		e, _, err := selectValue(c, key, r, v)
+		e, k, err := selectValue(c, key, r, v)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		return e, nil
+		return k, e, nil
 	}
 }
 
@@ -267,7 +267,8 @@ func negmax(n, max int) int {
 
 // ()
 func newScript(script gval.Evaluable) plainSelector {
-	return func(c context.Context, r, v interface{}) (interface{}, error) {
-		return script(currentContext(c, v), r)
+	return func(c context.Context, r, v interface{}) (interface{}, interface{}, error) {
+		value, err := script(currentContext(c, v), r)
+		return nil, value, err
 	}
 }

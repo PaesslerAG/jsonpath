@@ -44,6 +44,15 @@ func Get(path string, value interface{}) (interface{}, error) {
 	return eval(context.Background(), value)
 }
 
+func GetWithPaths(path string, value interface{}) (interface{}, error) {
+	ctx := context.WithValue(context.Background(), CollectFullPathsContextKey{}, true)
+	eval, err := lang.NewEvaluableWithContext(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	return eval(ctx, value)
+}
+
 var lang = gval.NewLanguage(
 	gval.Base(),
 	gval.PrefixExtension('$', parseRootPath),
