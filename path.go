@@ -97,15 +97,9 @@ func (p *ambiguousPath) evaluate(ctx context.Context, parameter interface{}) (in
 
 func (p *ambiguousPath) evaluateWithPaths(ctx context.Context, parameter interface{}) (interface{}, error) {
 	m := map[string]interface{}{}
-	matchs := []interface{}{}
-	wildcards := []interface{}{}
 	p.visitMatchs(ctx, parameter, func(keys []interface{}, match interface{}) {
-		matchs = append(matchs, match)
-		wildcards = append(wildcards, keys)
+		m[toJSONPath(convertPath(keys))] = match
 	})
-	for i, w := range wildcards {
-		m[toJSONPath(convertPath(w.([]interface{})))] = matchs[i]
-	}
 	return m, nil
 }
 
@@ -148,7 +142,7 @@ func convertPath(segments []interface{}) []interface{} {
 		if s, ok := sRaw.([]interface{}); ok {
 			liIndex := len(s) - 1
 
-			if liIndex >= 0 && i == sCount-1 {
+			if (liIndex >= 0 && i == sCount-1) || (i > 0 && liIndex < sCount) {
 				s = convertPath(append([]interface{}{s[liIndex]}, s[:liIndex]...))
 			}
 
