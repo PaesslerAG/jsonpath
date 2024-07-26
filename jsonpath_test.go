@@ -619,6 +619,50 @@ func TestJsonPath(t *testing.T) {
 				`$["welcome"]["message"]["1"]`: "Hello World!",
 			},
 		},
+		{
+			name: "Issue #45 (Wrong keys for nested arrays with filter)",
+			path: `$.o1.a1[*].a2[?(@.p1 == "v1")]`,
+			data: `{
+			  "o1": {
+				  "a1": [
+						{
+							"a2": [
+								{
+									"p1": "v1"
+								},
+								{
+									"p2": "v2"
+								},
+								{
+									"p1": "v1"
+								}
+							]
+						},
+						{},
+						{
+							"a2": [
+								{
+									"p1": "v1"
+								},
+								{
+									"p2": "v2"
+								},
+								{
+									"p1": "v1"
+								}
+							]
+						}
+					]
+				}
+			}`,
+			want: arr{obj{"p1": "v1"}, obj{"p1": "v1"}, obj{"p1": "v1"}, obj{"p1": "v1"}},
+			wantWithPaths: obj{
+				`$["o1"]["a1"]["0"]["a2"]["0"]`: obj{"p1": "v1"},
+				`$["o1"]["a1"]["0"]["a2"]["2"]`: obj{"p1": "v1"},
+				`$["o1"]["a1"]["2"]["a2"]["0"]`: obj{"p1": "v1"},
+				`$["o1"]["a1"]["2"]["a2"]["2"]`: obj{"p1": "v1"},
+			},
+		},
 	}
 	for _, tt := range tests {
 		tt.lang = jsonpath.Language()
