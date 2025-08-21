@@ -15,7 +15,7 @@ import (
 type jsonpathTest struct {
 	name          string
 	path          string
-	data          string
+	data          any
 	lang          gval.Language
 	reorder       bool
 	want          interface{}
@@ -24,8 +24,8 @@ type jsonpathTest struct {
 	wantParseErr  bool
 }
 
-type obj = map[string]interface{}
-type arr = []interface{}
+type obj = map[string]any
+type arr = []any
 
 func TestJsonPath(t *testing.T) {
 
@@ -49,6 +49,15 @@ func TestJsonPath(t *testing.T) {
 			},
 		},
 		{
+			name: "root map",
+			path: "$",
+			data: obj{"a": "aa"},
+			want: obj{"a": "aa"},
+			wantWithPaths: obj{
+				"$": obj{"a": "aa"},
+			},
+		},
+		{
 			name: "simple select array",
 			path: "$[1]",
 			data: `[7, "hey"]`,
@@ -58,9 +67,27 @@ func TestJsonPath(t *testing.T) {
 			},
 		},
 		{
+			name: "simple select array2",
+			path: "$[1]",
+			data: arr{7, "hey"},
+			want: "hey",
+			wantWithPaths: obj{
+				`$["1"]`: "hey",
+			},
+		},
+		{
 			name: "negative select array",
 			path: "$[-1]",
 			data: `[7, "hey"]`,
+			want: "hey",
+			wantWithPaths: obj{
+				`$["-1"]`: "hey",
+			},
+		},
+		{
+			name: "negative select array2",
+			path: "$[-1]",
+			data: arr{7, "hey"},
 			want: "hey",
 			wantWithPaths: obj{
 				`$["-1"]`: "hey",
@@ -85,11 +112,29 @@ func TestJsonPath(t *testing.T) {
 			},
 		},
 		{
+			name: "simple select object2",
+			path: "$[1]",
+			data: obj{"1": "aa"},
+			want: "aa",
+			wantWithPaths: obj{
+				`$["1"]`: "aa",
+			},
+		},
+		{
 			name: "simple select out of bounds",
 			path: "$[1]",
 			data: `["hey"]`,
 			want: nil,
 			wantWithPaths: obj{ // Not sure this makes sense, but not sure how to tell no match from a "null" match
+				`$["1"]`: nil,
+			},
+		},
+		{
+			name: "simple select out of bounds2",
+			path: "$[1]",
+			data: arr{"hey"},
+			want: nil,
+			wantWithPaths: obj{
 				`$["1"]`: nil,
 			},
 		},
@@ -100,9 +145,24 @@ func TestJsonPath(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "simple select unknown key2",
+			path:    "$[1]",
+			data:    obj{"2": "aa"},
+			wantErr: true,
+		},
+		{
 			name: "select array",
 			path: "$[3].a",
 			data: `[55,41,70,{"a":"bb"}]`,
+			want: "bb",
+			wantWithPaths: obj{
+				`$["3"]["a"]`: "bb",
+			},
+		},
+		{
+			name: "select array2",
+			path: "$[3].a",
+			data: arr{55, 41, 70, obj{"a": "bb"}},
 			want: "bb",
 			wantWithPaths: obj{
 				`$["3"]["a"]`: "bb",
@@ -118,9 +178,36 @@ func TestJsonPath(t *testing.T) {
 			},
 		},
 		{
+			name: "select object2",
+			path: "$[3].a",
+			data: obj{"3": obj{"a": "aa"}},
+			want: "aa",
+			wantWithPaths: obj{
+				`$["3"]["a"]`: "aa",
+			},
+		},
+		{
+			name: "select object3",
+			path: "$[3].a",
+			data: map[string]obj{"3": {"a": "aa"}},
+			want: "aa",
+			wantWithPaths: obj{
+				`$["3"]["a"]`: "aa",
+			},
+		},
+		{
 			name: "range array",
 			path: "$[2:6].a",
 			data: `[55,41,70,{"a":"bb"}]`,
+			want: arr{"bb"},
+			wantWithPaths: obj{
+				`$["3"]["a"]`: "bb",
+			},
+		},
+		{
+			name: "range array2",
+			path: "$[2:6].a",
+			data: arr{55, 41, 70, obj{"a": "bb"}},
 			want: arr{"bb"},
 			wantWithPaths: obj{
 				`$["3"]["a"]`: "bb",
@@ -134,9 +221,53 @@ func TestJsonPath(t *testing.T) {
 			wantWithPaths: obj{},
 		},
 		{
+			name:          "range object2", //no range over objects
+			path:          "$[2:6].a",
+			data:          obj{"3": obj{"a": "aa"}},
+			want:          arr{},
+			wantWithPaths: obj{},
+		},
+		{
+			name:          "range object3", //no range over objects
+			path:          "$[2:6].a",
+			data:          map[string]obj{"3": {"a": "aa"}},
+			want:          arr{},
+			wantWithPaths: obj{},
+		},
+		{
 			name: "range multi match",
 			path: "$[2:6].a",
 			data: `[{"a":"xx"},41,{"a":"b1"},{"a":"b2"},55,{"a":"b3"},{"a":"x2"} ]`,
+			want: arr{
+				"b1",
+				"b2",
+				"b3",
+			},
+			wantWithPaths: obj{
+				`$["2"]["a"]`: "b1",
+				`$["3"]["a"]`: "b2",
+				`$["5"]["a"]`: "b3",
+			},
+		},
+		{
+			name: "range multi match2",
+			path: "$[2:6].a",
+			data: arr{obj{"a": "xx"}, 41, obj{"a": "b1"}, obj{"a": "b2"}, 55, obj{"a": "b3"}, obj{"a": "x2"}},
+			want: arr{
+				"b1",
+				"b2",
+				"b3",
+			},
+			wantWithPaths: obj{
+				`$["2"]["a"]`: "b1",
+				`$["3"]["a"]`: "b2",
+				`$["5"]["a"]`: "b3",
+			},
+		},
+		{
+			name: "range multi match3",
+			path: "$[2:6].a",
+			data: []obj{{"a": "xx"}, {"b": 41}, {"a": "b1"}, {"a": "b2"}, {"b": 55}, {"a": "b3"}, {"a": "x2"}},
 			want: arr{
 				"b1",
 				"b2",
@@ -166,6 +297,23 @@ func TestJsonPath(t *testing.T) {
 			},
 		},
 		{
+			name: "range all2",
+			path: "$[:]",
+			data: arr{55, 41, 70, obj{"a": "bb"}},
+			want: arr{
+				55,
+				41,
+				70,
+				obj{"a": "bb"},
+			},
+			wantWithPaths: obj{
+				`$["0"]`: 55,
+				`$["1"]`: 41,
+				`$["2"]`: 70,
+				`$["3"]`: obj{"a": "bb"},
+			},
+		},
+		{
 			name: "range all even",
 			path: "$[::2]",
 			data: `[55,41,70,{"a":"bb"}]`,
@@ -179,6 +327,19 @@ func TestJsonPath(t *testing.T) {
 			},
 		},
 		{
+			name: "range all even2",
+			path: "$[::2]",
+			data: arr{55, 41, 70, obj{"a": "bb"}},
+			want: arr{
+				55,
+				70,
+			},
+			wantWithPaths: obj{
+				`$["0"]`: 55,
+				`$["2"]`: 70,
+			},
+		},
+		{
 			name: "range all even reverse",
 			path: "$[::-2]",
 			data: `[55,41,70,{"a":"bb"}]`,
@@ -189,6 +350,19 @@ func TestJsonPath(t *testing.T) {
 			wantWithPaths: obj{
 				`$["3"]`: obj{"a": "bb"},
 				`$["1"]`: 41.,
+			},
+		},
+		{
+			name: "range all even reverse2",
+			path: "$[::-2]",
+			data: arr{55, 41, 70, obj{"a": "bb"}},
+			want: arr{
+				obj{"a": "bb"},
+				41,
+			},
+			wantWithPaths: obj{
+				`$["3"]`: obj{"a": "bb"},
+				`$["1"]`: 41,
 			},
 		},
 		{
@@ -664,7 +838,11 @@ func TestJsonPath(t *testing.T) {
 			},
 		},
 	}
+	runCase := ""
 	for _, tt := range tests {
+		if runCase != "" && tt.name != runCase {
+			continue
+		}
 		tt.lang = jsonpath.Language()
 		t.Run(tt.name, tt.test)
 	}
@@ -678,8 +856,15 @@ func (tt jsonpathTest) test(t *testing.T) {
 	if tt.wantParseErr {
 		return
 	}
-	var v interface{}
-	err = json.Unmarshal([]byte(tt.data), &v)
+	var v any
+	switch d := tt.data.(type) {
+	case string:
+		err = json.Unmarshal([]byte(d), &v)
+	case []byte:
+		err = json.Unmarshal(d, &v)
+	default:
+		v = d
+	}
 	if err != nil {
 		t.Fatalf("[%s]: could not parse json input: %v", tt.name, err)
 	}

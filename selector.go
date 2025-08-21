@@ -3,7 +3,9 @@ package jsonpath
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/PaesslerAG/gval"
 )
@@ -125,8 +127,9 @@ func selectValue(c context.Context, key gval.Evaluable, r, v interface{}) (value
 		return r, k, nil
 
 	default:
-		return nil, "", fmt.Errorf("unsupported value type %T for select, expected map[string]interface{}, []interface{} or Array", o)
+		return selectValueByReflect(c, key, r, v)
 	}
+
 }
 
 // ..
@@ -141,6 +144,92 @@ func mapper(c context.Context, r, v interface{}, match ambiguousMatcher) {
 			match(append([]interface{}{wildcard}, key.([]interface{})...), v)
 		})
 	})
+}
+
+func selectValueByReflect(c context.Context, key gval.Evaluable, r, v interface{}) (value interface{}, jkey string, err error) {
+
+	c = currentContext(c, v)
+
+	// Use reflect to determine type
+	val := reflect.ValueOf(v)
+
+	// Handle pointer types
+	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return nil, "", fmt.Errorf("nil pointer")
+		}
+		val = val.Elem()
+	}
+
+	switch val.Kind() {
+	case reflect.Slice, reflect.Array:
+		// Handle slice and array types
+		i, err := key.EvalInt(c, r)
+		if err != nil {
+			return nil, "", fmt.Errorf("could not select value, invalid key: %s", err)
+		}
+
+		length := val.Len()
+		p := i
+		if i < 0 {
+			p = length + i
+		}
+		if p < 0 || p >= length {
+			return nil, strconv.Itoa(i), nil
+		}
+
+		// Get element value
+		elem := val.Index(p)
+		if elem.CanInterface() {
+			return elem.Interface(), strconv.Itoa(i), nil
+		}
+		return nil, strconv.Itoa(i), fmt.Errorf("cannot access element at index %d", i)
+
+	case reflect.Map:
+		// Handle map types
+		k, err := key.EvalString(c, r)
+		if err != nil {
+			return nil, "", fmt.Errorf("could not select value, invalid key: %s", err)
+		}
+
+		// Create reflect.Value for key
+		keyVal := reflect.ValueOf(k)
+		if !keyVal.Type().AssignableTo(val.Type().Key()) {
+			return nil, "", fmt.Errorf("key type %T is not assignable to map key type %v", k, val.Type().Key())
+		}
+
+		// Find value in map
+		elem := val.MapIndex(keyVal)
+		if !elem.IsValid() {
+			return nil, "", fmt.Errorf("unknown key %s", k)
+		}
+
+		if elem.CanInterface() {
+			return elem.Interface(), k, nil
+		}
+		return nil, "", fmt.Errorf("cannot access value for key %s", k)
+
+	case reflect.Struct:
+		// Handle struct types
+		k, err := key.EvalString(c, r)
+		if err != nil {
+			return nil, "", fmt.Errorf("could not select value, invalid key: %s", err)
+		}
+
+		// Find field, supporting both field name and JSON tag
+		field, fieldName := findStructField(val, k)
+		if !field.IsValid() {
+			return nil, "", fmt.Errorf("unknown field %s", k)
+		}
+
+		if field.CanInterface() {
+			return field.Interface(), fieldName, nil
+		}
+		return nil, "", fmt.Errorf("cannot access field %s", k)
+
+	default:
+		return nil, "", fmt.Errorf("unsupported value type %T for select, expected slice, array, map, struct, map[string]interface{}, []interface{}", val.Kind())
+	}
 }
 
 func visitAll(v interface{}, visit func(key string, v interface{})) {
@@ -163,6 +252,77 @@ func visitAll(v interface{}, visit func(key string, v interface{})) {
 
 	case Object:
 		v.ForEach(visit)
+	default:
+		visitAllByReflect(v, visit)
+	}
+
+}
+
+func visitAllByReflect(v interface{}, visit func(key string, v interface{})) {
+
+	// Use reflect to determine type
+	val := reflect.ValueOf(v)
+
+	// Handle pointer types
+	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return
+		}
+		val = val.Elem()
+	}
+
+	switch val.Kind() {
+	case reflect.Slice, reflect.Array:
+		// Handle slice and array types
+		for i := 0; i < val.Len(); i++ {
+			k := strconv.Itoa(i)
+			elem := val.Index(i)
+			if elem.CanInterface() {
+				visit(k, elem.Interface())
+			}
+		}
+
+	case reflect.Map:
+		// Handle map types
+		iter := val.MapRange()
+		for iter.Next() {
+			key := iter.Key()
+			value := iter.Value()
+			if key.CanInterface() && value.CanInterface() {
+				// Convert key to string
+				var keyStr string
+				switch k := key.Interface().(type) {
+				case string:
+					keyStr = k
+				default:
+					keyStr = fmt.Sprintf("%v", k)
+				}
+				visit(keyStr, value.Interface())
+			}
+		}
+
+	case reflect.Struct:
+		// Handle struct types
+		for i := 0; i < val.NumField(); i++ {
+			field := val.Field(i)
+			fieldType := val.Type().Field(i)
+			if field.CanInterface() {
+				// Prioritize JSON tag, if not, use field name
+				key := fieldType.Name
+				jsonTag := fieldType.Tag.Get("json")
+				if jsonTag != "" {
+					// Handle JSON tag, which may include options like "omitempty"
+					if commaIndex := strings.Index(jsonTag, ","); commaIndex != -1 {
+						jsonTag = jsonTag[:commaIndex]
+					}
+					if jsonTag != "" && jsonTag != "-" {
+						key = jsonTag
+					}
+				}
+				visit(key, field.Interface())
+			}
+		}
+
 	}
 }
 
@@ -249,6 +409,44 @@ func rangeSelector(min, max, step gval.Evaluable) ambiguousSelector {
 					match(k, r)
 				}
 			}
+		default:
+			val := reflect.ValueOf(v)
+
+			// Handle pointer types
+			if val.Kind() == reflect.Ptr {
+				if val.IsNil() {
+					return
+				}
+				val = val.Elem()
+			}
+			if val.Kind() != reflect.Slice && val.Kind() != reflect.Array {
+				return
+			}
+
+			// Handle slice and array types
+			n := val.Len()
+			min = negmax(min, n)
+			max = negmax(max, n)
+
+			if min > max {
+				return
+			}
+
+			if step > 0 {
+				for i := min; i < max; i += step {
+					elem := val.Index(i)
+					if elem.CanInterface() {
+						match(strconv.Itoa(i), elem.Interface())
+					}
+				}
+			} else {
+				for i := max - 1; i >= min; i += step {
+					elem := val.Index(i)
+					if elem.CanInterface() {
+						match(strconv.Itoa(i), elem.Interface())
+					}
+				}
+			}
 		}
 	}
 }
@@ -271,4 +469,36 @@ func newScript(script gval.Evaluable) plainSelector {
 		value, err := script(currentContext(c, v), r)
 		return nil, value, err
 	}
+}
+
+// findStructField finds struct field, supporting both field name and JSON tag
+func findStructField(val reflect.Value, key string) (reflect.Value, string) {
+	typ := val.Type()
+
+	// First try direct field name matching
+	if field := val.FieldByName(key); field.IsValid() {
+		return field, key
+	}
+
+	// Then try JSON tag matching
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		fieldType := typ.Field(i)
+
+		// Get JSON tag
+		jsonTag := fieldType.Tag.Get("json")
+		if jsonTag != "" {
+			// Handle JSON tag, which may include options like "omitempty"
+			if commaIndex := strings.Index(jsonTag, ","); commaIndex != -1 {
+				jsonTag = jsonTag[:commaIndex]
+			}
+
+			if jsonTag == key {
+				return field, fieldType.Name
+			}
+		}
+	}
+
+	// If not found, return invalid value
+	return reflect.Value{}, ""
 }
