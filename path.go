@@ -109,11 +109,12 @@ func (p *ambiguousPath) visitMatchs(ctx context.Context, r interface{}, visit pa
 	})
 }
 
-func (p *ambiguousPath) branchMatcher(ctx context.Context, r interface{}, m ambiguousMatcher) ambiguousMatcher {
-	return func(k, v interface{}) {
-		p.branch(ctx, r, v, m)
-	}
-}
+// unused
+// func (p *ambiguousPath) branchMatcher(ctx context.Context, r interface{}, m ambiguousMatcher) ambiguousMatcher {
+// 	return func(k, v interface{}) {
+// 		p.branch(ctx, r, v, m)
+// 	}
+// }
 
 func (p *ambiguousPath) withPlainSelector(selector plainSelector) path {
 	p.ending = append(p.ending, selector)

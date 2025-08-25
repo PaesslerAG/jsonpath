@@ -41,9 +41,7 @@ func parseJSONObject(ctx context.Context, p *gval.Parser) (gval.Evaluable, error
 				return nil, err
 			}
 			if p.Scan() != ':' {
-				if err != nil {
-					return nil, p.Expected("object", ':')
-				}
+				return nil, p.Expected("object", ':')
 			}
 			e, err := parseJSONObjectElement(ctx, p, hasWildcard, key)
 			if err != nil {
