@@ -220,6 +220,9 @@ func rangeSelector(min, max, step gval.Evaluable) ambiguousSelector {
 			if step > 0 {
 				for i := min; i < max; i += step {
 					match(strconv.Itoa(i), o[i])
+					if step >= max-i {
+						break
+					}
 				}
 			} else {
 				for i := max - 1; i >= min; i += step {
@@ -241,6 +244,9 @@ func rangeSelector(min, max, step gval.Evaluable) ambiguousSelector {
 					k := strconv.Itoa(i)
 					r, _ := o.SelectGVal(c, k)
 					match(k, r)
+					if step >= max-i {
+						break
+					}
 				}
 			} else {
 				for i := max - 1; i >= min; i += step {

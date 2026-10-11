@@ -767,3 +767,23 @@ func typeOrder(o interface{}) int {
 		panic(fmt.Errorf("unknown type %T", o))
 	}
 }
+
+func TestRangeLargeStep(t *testing.T) {
+	// This step is exactly representable as float64 on 32- and 64-bit systems,
+	// but adding the starting index would overflow an int.
+	step := int(^uint(0)>>1) - 2047
+	path := fmt.Sprintf("$[4096:4097:%d]", step)
+	array := make([]interface{}, 4097)
+	array[4096] = 42
+	custom := make(ArrayLike, 4097)
+	custom[4096] = 42
+	for _, data := range []interface{}{array, custom} {
+		got, err := jsonpath.Get(path, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, []interface{}{42}) {
+			t.Errorf("%T: got %v, want [42]", data, got)
+		}
+	}
+}
